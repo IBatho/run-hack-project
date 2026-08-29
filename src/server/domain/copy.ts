@@ -1,5 +1,5 @@
 import { formatPace } from '../../shared/pace.js';
-import type { BetTarget, SponsorHook } from '../../shared/types.js';
+import type { BetTarget, CoachMode, SponsorHook } from '../../shared/types.js';
 import type { TargetResult } from './betEngine.js';
 
 const ROASTS = [
@@ -10,25 +10,51 @@ const ROASTS = [
   'I have seen glaciers with better splits, {runner}. {pace} is not a pace, it is a lifestyle choice.',
 ];
 
+/**
+ * Aggressive coach lines: shouted, confrontational, but always pointed at the
+ * next step rather than at the runner as a person. Written for this app — no
+ * real coach, athlete or public figure is quoted or impersonated.
+ */
+const DRILL_LINES = [
+  '{runner}! {pace} is not the plan. The plan is {target}. Stop negotiating with yourself and MOVE.',
+  'You are {slowBy} percent soft right now, {runner}. That voice asking to stop? Ignore it. One more kilometre. GO.',
+  'Nobody is coming to carry you, {runner}. {pace} on the clock, {target} on the plan. Close that gap. NOW.',
+  'This is the part you always quit, {runner}. Not today. Drive the knees, drive the arms, hold {target}. MOVE YOUR FEET.',
+  'Comfortable at {pace}, are we? Comfortable is where progress dies, {runner}. Get after it. RIGHT NOW.',
+  '{runner}, you asked for this. So earn it. Twenty hard seconds, then twenty more. NO EXCUSES, NO SLOWING DOWN.',
+];
+
+/** Voice-shaping hint the TTS layer maps to provider-specific settings. */
+export type VoiceIntensity = 'normal' | 'aggressive';
+
+export const intensityFor = (mode: CoachMode): VoiceIntensity =>
+  mode === 'drill' ? 'aggressive' : 'normal';
+
 export interface RoastCopyInput {
   runnerName: string;
   paceSecPerKm: number;
   targetPaceSecPerKm: number;
   slowByPct: number;
   sponsorHook: SponsorHook | null;
+  /** Personality the line is written in (default `roast`). */
+  coachMode?: CoachMode;
   /** Deterministic template selection for tests/demos. */
   seed?: number;
 }
 
 export function composeRoast(input: RoastCopyInput): string {
-  const index = (input.seed ?? Math.floor(Math.random() * ROASTS.length)) % ROASTS.length;
-  const base = ROASTS[index]
+  const templates = input.coachMode === 'drill' ? DRILL_LINES : ROASTS;
+  const index = (input.seed ?? Math.floor(Math.random() * templates.length)) % templates.length;
+  const base = templates[index]
     .replaceAll('{runner}', input.runnerName)
     .replaceAll('{pace}', formatPace(input.paceSecPerKm))
     .replaceAll('{target}', formatPace(input.targetPaceSecPerKm))
     .replaceAll('{slowBy}', String(Math.max(1, Math.round(input.slowByPct * 100))));
 
   if (!input.sponsorHook) return base;
+  if (input.coachMode === 'drill') {
+    return `${base} ${input.sponsorHook.productPlug.toUpperCase()} ${input.sponsorHook.tagline}`;
+  }
   return `${base} ${input.sponsorHook.productPlug} ${input.sponsorHook.tagline}`;
 }
 

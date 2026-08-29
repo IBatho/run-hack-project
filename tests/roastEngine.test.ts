@@ -15,6 +15,7 @@ const session: RunSession = {
   debounceSamples: 2,
   cooldownSec: 60,
   voiceId: 'voice',
+  coachMode: 'roast',
   sponsorEnabled: true,
   createdAt: new Date(0).toISOString(),
 };

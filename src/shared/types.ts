@@ -2,6 +2,20 @@
 
 export type ProviderMode = 'live' | 'mock';
 
+/**
+ * Coaching personality used to compose and voice a roast.
+ *
+ * - `roast`: dry, sarcastic wind-up (the original prototype tone).
+ * - `drill`: an original aggressive coach — shouted, relentless, motivational.
+ *   It is a persona of this app, not an impression of any real person.
+ */
+export type CoachMode = 'roast' | 'drill';
+
+export const COACH_MODES: readonly CoachMode[] = ['roast', 'drill'];
+
+export const isCoachMode = (value: unknown): value is CoachMode =>
+  typeof value === 'string' && (COACH_MODES as readonly string[]).includes(value);
+
 /** A configured runner session that the Audio Roast Engine monitors. */
 export interface RunSession {
   id: string;
@@ -16,6 +30,8 @@ export interface RunSession {
   cooldownSec: number;
   /** ElevenLabs voice id used for this session's roasts. */
   voiceId: string;
+  /** Coaching personality applied to copy and voice settings. */
+  coachMode: CoachMode;
   /** Whether Healf sponsor hooks are woven into roast copy. */
   sponsorEnabled: boolean;
   createdAt: string;
@@ -54,6 +70,8 @@ export interface Roast {
   id: string;
   sessionId: string;
   trigger: RoastTrigger;
+  /** Personality the copy and audio were generated with. */
+  coachMode: CoachMode;
   text: string;
   paceSecPerKm: number | null;
   targetPaceSecPerKm: number;
@@ -167,6 +185,43 @@ export interface LeaderboardEntry {
 
 /** What prompted a coaching message to Poke. */
 export type PokeCoachEvent = 'run_completed' | 'roast_fired' | 'digest';
+
+/** Conversational command Poke recognised and handed to the app. */
+export type RunCommandIntent = 'start_run' | 'stop_run' | 'roast_now';
+
+/**
+ * Lifecycle of a Poke-initiated run.
+ *
+ * `awaiting_gesture` is the important one: Poke can create the session and the
+ * roast queue server-side, but browsers only start audio from a user gesture, so
+ * the run is not truly live until the web app claims the command from a tap.
+ */
+export type RunCommandStatus = 'awaiting_gesture' | 'armed' | 'completed' | 'expired';
+
+export interface RunCommand {
+  id: string;
+  intent: RunCommandIntent;
+  status: RunCommandStatus;
+  runnerName: string;
+  /** Roast session the web app should track and voice. */
+  sessionId: string;
+  coachMode: CoachMode;
+  targetPaceSecPerKm: number;
+  /** What the runner typed in Poke. */
+  requestText: string;
+  /** Reply Poke should send back into the chat. */
+  reply: string;
+  /** Link the runner taps to arm audio and start tracking. */
+  webAppUrl: string;
+  source: 'poke_mcp' | 'poke_webhook';
+  conversationId: string | null;
+  idempotencyKey: string | null;
+  createdAt: string;
+  claimedAt: string | null;
+  /** True once the browser confirmed Web Audio is actually running. */
+  audioArmed: boolean;
+  expiresAt: string;
+}
 
 /** One coaching message pushed to Poke (or recorded by the mock channel). */
 export interface PokeCoachMessage {

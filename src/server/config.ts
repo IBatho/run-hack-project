@@ -1,4 +1,5 @@
-import type { ProviderMode } from '../shared/types.js';
+import type { CoachMode, ProviderMode } from '../shared/types.js';
+import { isCoachMode } from '../shared/types.js';
 
 export interface AppConfig {
   port: number;
@@ -10,6 +11,12 @@ export interface AppConfig {
     baseUrl: string;
     modelId: string;
     defaultVoiceId: string;
+    /** Voice used for drill (aggressive) mode; falls back to the session voice. */
+    drillVoiceId: string | null;
+  };
+  coach: {
+    /** Coaching personality new sessions start in. */
+    defaultMode: CoachMode;
   };
   healf: {
     apiKey: string | null;
@@ -65,6 +72,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       baseUrl: env.ELEVENLABS_BASE_URL?.replace(/\/$/, '') || 'https://api.elevenlabs.io',
       modelId: env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5',
       defaultVoiceId: env.ELEVENLABS_VOICE_ID || 'JBFqnCBsd6RMkjVDRZzb',
+      drillVoiceId: str(env.ELEVENLABS_DRILL_VOICE_ID),
+    },
+    coach: {
+      defaultMode: isCoachMode(env.COACH_DEFAULT_MODE) ? env.COACH_DEFAULT_MODE : 'roast',
     },
     healf: {
       apiKey: str(env.HEALF_API_KEY),

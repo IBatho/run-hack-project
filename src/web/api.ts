@@ -1,6 +1,7 @@
 import type {
   ActivitySource,
   Bet,
+  CoachMode,
   LeaderboardEntry,
   LeaderboardMetric,
   PaceSample,
@@ -10,6 +11,7 @@ import type {
   ProviderStatus,
   Roast,
   RunActivity,
+  RunCommand,
   RunSession,
   StravaStatus,
 } from '../shared/types.js';
@@ -71,7 +73,7 @@ export const api = {
       { method: 'POST', body: JSON.stringify(input) },
     ),
 
-  manualRoast: (id: string, input: { text?: string; paceSecPerKm?: number }) =>
+  manualRoast: (id: string, input: { text?: string; paceSecPerKm?: number; coachMode?: CoachMode }) =>
     request<{ roast: Roast }>(`/api/sessions/${id}/roasts`, {
       method: 'POST',
       body: JSON.stringify(input),
@@ -131,6 +133,23 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(runnerName ? { runnerName } : {}),
     }),
+
+  /** Commands Poke created that are waiting for a tap to unlock browser audio. */
+  pendingCommands: (runnerName?: string) =>
+    request<{ pending: RunCommand[]; commands: RunCommand[] }>(
+      runnerName ? `/api/run-commands?runnerName=${encodeURIComponent(runnerName)}` : '/api/run-commands',
+    ),
+
+  getCommand: (id: string) => request<{ command: RunCommand }>(`/api/run-commands/${id}`),
+
+  claimCommand: (id: string, audioArmed: boolean) =>
+    request<{ command: RunCommand }>(`/api/run-commands/${id}/claim`, {
+      method: 'POST',
+      body: JSON.stringify({ audioArmed }),
+    }),
+
+  completeCommand: (id: string) =>
+    request<{ command: RunCommand }>(`/api/run-commands/${id}/complete`, { method: 'POST' }),
 
   reset: () => request<{ ok: boolean }>('/api/demo/reset', { method: 'POST' }),
 };
