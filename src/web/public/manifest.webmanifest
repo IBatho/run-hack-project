@@ -1,0 +1,19 @@
+{
+  "name": "Run Hack Tracker",
+  "short_name": "Run Hack",
+  "description": "Browser GPS tracker with live pace roasts and a leaderboard.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1117",
+  "theme_color": "#0f1117",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
