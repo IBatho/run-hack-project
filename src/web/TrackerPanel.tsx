@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatPace, parsePace } from '../shared/pace.js';
 import type { Roast, RunCommand } from '../shared/types.js';
 import { api, clipUrl, type SessionWithThreshold } from './api.js';
-import { AudioCues } from './tracking/audioCues.js';
+import { AudioCues, shouldSpeakLocally } from './tracking/audioCues.js';
 import { bindMediaSession, requestWakeLock, type WakeLockHandle } from './tracking/backgroundSession.js';
 import { RoastAudioSession, type RoastAudioSnapshot } from './tracking/roastAudio.js';
 import {
@@ -28,10 +28,11 @@ const durationLabel = (seconds: number): string => {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 };
 
+/** Mock clips are formant gibberish, so they queue as text for the speech synthesiser. */
 const toQueued = (roast: Roast) => ({
   id: roast.id,
   text: roast.text,
-  clipUrl: roast.audio ? clipUrl(roast.audio.url) : null,
+  clipUrl: roast.audio && !shouldSpeakLocally(roast.audio) ? clipUrl(roast.audio.url) : null,
   at: Date.parse(roast.createdAt),
 });
 

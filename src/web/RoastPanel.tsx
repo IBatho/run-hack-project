@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatPace, parsePace } from '../shared/pace.js';
 import type { CoachMode, PaceSample, Roast } from '../shared/types.js';
 import { api, clipUrl, type SessionWithThreshold } from './api.js';
+import { shouldSpeakLocally, speakText, speechSupported } from './tracking/audioCues.js';
 
 /** Pace series used by the scripted demo: on target, then a slow patch. */
 const DEMO_SERIES: Array<{ paceSecPerKm: number; distanceKm: number }> = [
@@ -47,9 +48,14 @@ export function RoastPanel({ reloadKey }: { reloadKey: number }) {
 
   useEffect(() => {
     const latest = roasts[0];
-    if (!autoplay || !latest?.audio || lastPlayedRef.current === latest.id) return;
+    if (!autoplay || !latest || lastPlayedRef.current === latest.id) return;
     lastPlayedRef.current = latest.id;
-    void new Audio(clipUrl(latest.audio.url)).play().catch(() => undefined);
+    const clip = latest.audio;
+    if (!clip || shouldSpeakLocally(clip)) {
+      speakText(latest.text);
+      return;
+    }
+    void new Audio(clipUrl(clip.url)).play().catch(() => speakText(latest.text));
   }, [roasts, autoplay]);
 
   const patch = async (changes: Partial<SessionWithThreshold>) => {
@@ -235,6 +241,9 @@ export function RoastPanel({ reloadKey }: { reloadKey: number }) {
           <input type="checkbox" checked={autoplay} onChange={(e) => setAutoplay(e.target.checked)} />
           Auto-play newest roast
         </label>
+        {!speechSupported() && (
+          <p className="muted">This browser has no speech synthesiser, so mock roasts stay silent.</p>
+        )}
         {status && <p className="status">{status}</p>}
         <p className="muted">
           {samples.length} samples · last{' '}
@@ -259,10 +268,17 @@ export function RoastPanel({ reloadKey }: { reloadKey: number }) {
               {roast.audio && <span className="muted">{roast.audio.provider} voice</span>}
             </div>
             <p>{roast.text}</p>
-            {roast.audio ? (
+            {roast.audio && !shouldSpeakLocally(roast.audio) ? (
               <audio controls src={clipUrl(roast.audio.url)} />
             ) : (
-              <p className="error-inline">Audio failed: {roast.audioError}</p>
+              <div className="row">
+                <button className="secondary" onClick={() => speakText(roast.text)}>
+                  🔊 Speak roast
+                </button>
+                <span className="muted">
+                  {roast.audio ? 'browser voice (mock provider)' : `audio failed: ${roast.audioError}`}
+                </span>
+              </div>
             )}
             {roast.sponsorHook && (
               <a className="sponsor-cta" href={roast.sponsorHook.ctaUrl} target="_blank" rel="noreferrer">

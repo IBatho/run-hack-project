@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { formatPace, parsePace } from '../shared/pace.js';
 import type { Bet, PokeDelivery } from '../shared/types.js';
 import { api, clipUrl } from './api.js';
+import { shouldSpeakLocally, speakText } from './tracking/audioCues.js';
 
 export function BetPanel({ reloadKey }: { reloadKey: number }) {
   const [bets, setBets] = useState<Bet[]>([]);
@@ -173,10 +174,22 @@ export function BetPanel({ reloadKey }: { reloadKey: number }) {
             <article className="roast">
               <h3>Confession voice note</h3>
               <p>{selected.confession.text}</p>
-              {selected.confession.audio ? (
+              {selected.confession.audio && !shouldSpeakLocally(selected.confession.audio) ? (
                 <audio controls src={clipUrl(selected.confession.audio.url)} />
               ) : (
-                <p className="error-inline">Audio failed: {selected.confession.audioError}</p>
+                <div className="row">
+                  <button
+                    className="secondary"
+                    onClick={() => speakText(selected.confession?.text ?? '')}
+                  >
+                    🔊 Speak confession
+                  </button>
+                  <span className="muted">
+                    {selected.confession.audio
+                      ? 'browser voice (mock provider)'
+                      : `audio failed: ${selected.confession.audioError}`}
+                  </span>
+                </div>
               )}
               {selected.confession.delivery && (
                 <p className={selected.confession.delivery.status === 'delivered' ? 'status' : 'error-inline'}>

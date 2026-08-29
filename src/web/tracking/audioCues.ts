@@ -12,7 +12,33 @@
  * page is in the background, which is the only state that matters during a run.
  */
 
+import type { AudioClip } from '../../shared/types.js';
+
 export type CueName = 'start' | 'finish' | 'slow';
+
+export const speechSupported = (): boolean =>
+  typeof window !== 'undefined' && 'speechSynthesis' in window;
+
+/**
+ * Speaks `text` with the browser's own synthesiser. Free, keyless, and the only
+ * intelligible option while the voice provider is mocked.
+ */
+export function speakText(text: string): boolean {
+  if (!speechSupported()) return false;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 1.05;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+  return true;
+}
+
+/**
+ * Mock clips are formant gibberish rather than words, so only a live provider
+ * clip is worth playing back; anything else is better spoken by the browser.
+ */
+export function shouldSpeakLocally(audio: AudioClip | null | undefined): boolean {
+  return audio?.provider !== 'live';
+}
 
 const CUES: Record<CueName, { frequencies: number[]; stepSec: number }> = {
   start: { frequencies: [660, 880], stepSec: 0.12 },
@@ -130,7 +156,7 @@ export class AudioCues implements RoastAudioPlayer {
    * and it costs nothing — the browser's own speech synthesiser, no API key.
    */
   async speak(text: string): Promise<void> {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    if (!speechSupported()) {
       throw new Error('speech synthesis unavailable');
     }
     await new Promise<void>((resolve, reject) => {
@@ -152,7 +178,7 @@ export class AudioCues implements RoastAudioPlayer {
       }
       this.current = null;
     }
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+    if (speechSupported()) window.speechSynthesis.cancel();
   }
 
   /**

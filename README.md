@@ -130,6 +130,12 @@ Live call: `POST {ELEVENLABS_BASE_URL}/v1/text-to-speech/{voiceId}` with header 
 
 Setup: create a key at <https://elevenlabs.io> → Profile → API Keys, pick a voice id from the Voice Library, set `ELEVENLABS_API_KEY` (+ optional `ELEVENLABS_VOICE_ID`), restart.
 
+Without a key the clip is the offline WAV renderer's formant gibberish, so the UI does not play it:
+roasts and confessions are spoken instead with the browser's own `SpeechSynthesis` voice (free, no
+key), either automatically (the tracker queue and **Auto-play newest roast**) or from the
+**🔊 Speak roast** button. Real ElevenLabs clips (`provider: live`) render as an `<audio>` player and
+are what the tracker actually plays through the headphones.
+
 ### Coach modes
 
 Every roast — threshold-fired or manual — is composed and voiced in one of two personalities
