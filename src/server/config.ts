@@ -54,6 +54,9 @@ export interface AppConfig {
   };
 }
 
+/** Shared-library voice with a dominant, firm read, used when drill mode has no override. */
+const DEFAULT_DRILL_VOICE_ID = 'pNInz6obpgDQGcFmaJgB';
+
 const num = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && value !== undefined && value !== '' ? parsed : fallback;
@@ -72,7 +75,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       baseUrl: env.ELEVENLABS_BASE_URL?.replace(/\/$/, '') || 'https://api.elevenlabs.io',
       modelId: env.ELEVENLABS_MODEL_ID || 'eleven_turbo_v2_5',
       defaultVoiceId: env.ELEVENLABS_VOICE_ID || 'JBFqnCBsd6RMkjVDRZzb',
-      drillVoiceId: str(env.ELEVENLABS_DRILL_VOICE_ID),
+      drillVoiceId: str(env.ELEVENLABS_DRILL_VOICE_ID) || DEFAULT_DRILL_VOICE_ID,
     },
     coach: {
       defaultMode: isCoachMode(env.COACH_DEFAULT_MODE) ? env.COACH_DEFAULT_MODE : 'roast',

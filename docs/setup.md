@@ -30,7 +30,7 @@ Full annotated list: [`.env.example`](../.env.example). Only the first column is
 | --- | --- | --- |
 | `ELEVENLABS_API_KEY` | yes | real generated voice instead of the offline WAV renderer |
 | `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` | no | which voice/model roasts use |
-| `ELEVENLABS_DRILL_VOICE_ID` | no | separate, harder-edged voice for drill mode |
+| `ELEVENLABS_DRILL_VOICE_ID` | no | override for drill mode's voice (defaults to "Adam - Dominant, Firm") |
 | `COACH_DEFAULT_MODE` | no | `roast` (default) or `drill` for new sessions |
 | `POKE_AI_API_KEY` | yes | outbound coaching messages to Poke |
 | `POKE_MCP_TOKEN` | yes | bearer token Poke must present to call our MCP server *and* `POST /api/poke/commands` |
