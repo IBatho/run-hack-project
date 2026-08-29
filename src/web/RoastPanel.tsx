@@ -36,6 +36,7 @@ export function RoastPanel({ reloadKey }: { reloadKey: number }) {
   }, []);
 
   useEffect(() => {
+    setStatus(null);
     load().catch((err: Error) => setStatus(err.message));
   }, [load, reloadKey]);
 
