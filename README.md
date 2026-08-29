@@ -50,7 +50,7 @@ Other scripts: `npm test`, `npm run lint`, `npm run typecheck`, `npm run build` 
 
 ## Architecture
 
-```
+```text
 src/shared/          types + pace formatting shared by API and UI
 src/server/
   config.ts          env parsing, live-vs-mock provider selection
