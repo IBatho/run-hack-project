@@ -130,7 +130,7 @@ export interface ProviderStatus {
 }
 
 /** Where a completed run came from. */
-export type ActivitySource = 'manual' | 'strava' | 'ios';
+export type ActivitySource = 'manual' | 'strava' | 'web';
 
 /** A completed run that feeds the leaderboard. */
 export interface RunActivity {

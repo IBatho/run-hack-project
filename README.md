@@ -1,10 +1,11 @@
 # run-hack-project
 
-Runnable prototype of two hackathon features:
+Runnable prototype of four hackathon features:
 
 1. **Audio Roast Engine** — when a runner's pace drops below a configurable target, an ElevenLabs voice roast is generated and played, with a **Healf** sponsor hook woven into the copy.
 2. **Ghost Pacer Bet** — a friend/group creates a stake with pace/distance targets; when a target is missed the runner's ElevenLabs "voice note of shame" is generated and pushed to the group via a **Poke** messaging webhook.
-3. **Leaderboard** — completed runs (manual, **Strava** import, or the iOS tracker) are ranked by distance, best pace or roasts taken, enriched with each runner's roast and bet record.
+3. **Live Tracker (PWA)** — a browser page that tracks distance/pace with the **Geolocation API**, streams live pace into the roast engine, and plays roasts and cues through the **Web Audio API**. Installable to a phone home screen; no app store, no Apple Developer account.
+4. **Leaderboard** — completed runs (manual, **Strava** import, or the browser tracker) are ranked by distance, best pace or roasts taken, enriched with each runner's roast and bet record.
 
 Every external provider sits behind an adapter with a local mock, so the whole flow runs end to end **with no credentials**.
 
@@ -19,6 +20,7 @@ Open <http://localhost:5173>:
 
 - **🔥 Audio Roast Engine** tab — tune target pace / tolerance / debounce / cooldown, hit **Run scripted demo**, and the roast audio auto-plays as the pace series crosses the threshold.
 - **👻 Ghost Pacer Bet** tab — create a stake, send progress pings, then **Finish run & settle**; a missed target produces the confession audio and a Poke delivery visible in the outbox.
+- **📍 Live Tracker** tab — pick a roast session, hit **Start run**, and your rolling pace is uploaded every 15s; roasts play automatically. Tick **Simulated GPS** to demo it on a desktop with no permission prompt. **Finish run** posts the run to the leaderboard as `web`.
 - **🏆 Leaderboard** tab — switch metric (distance / best pace / most roasted), log a run by hand, or **Connect** + **Sync activities** to pull runs from Strava (fixture runs in mock mode).
 
 Headless version of the same flow (API must be running):
@@ -49,7 +51,8 @@ src/server/
   services/          store (in-memory), audio store, roast + bet + activity orchestration
   app.ts             Express app factory (injectable config + fetch)
 src/web/             React prototype UI (Vite)
-ios/RunHackTracker/  SwiftUI + CoreLocation tracker prototype (source only, never compiled)
+src/web/tracking/    pure geo maths (`geoTrack.ts`) + Web Audio playback (`audioCues.ts`)
+src/web/public/      PWA manifest, icon, app-shell service worker
 scripts/demo.ts      end-to-end demo driver
 tests/               vitest: domain logic, adapters, API integration
 ```
@@ -92,9 +95,8 @@ Never commit real values; `.env` is gitignored.
 | Strava tracking | `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET` | `src/server/adapters/strava.ts` | strava.com/settings/api → create an API application |
 | Strava tracking | `STRAVA_REDIRECT_URI` (+ matching **Authorization Callback Domain** on the Strava app) | authorize URL + `GET /api/strava/callback` | Strava app settings |
 | Strava tracking | `STRAVA_REFRESH_TOKEN`, `STRAVA_RUNNER_NAME` | `ActivityService` bootstrap / activity attribution | from a completed OAuth exchange |
-| iOS tracker | Apple Developer account + Team ID, bundle identifier, provisioning/signing | Xcode target | developer.apple.com |
-| iOS tracker | Background Modes capability (*Location updates*, *Audio*), `NSLocationWhenInUseUsageDescription`, `NSLocationAlwaysAndWhenInUseUsageDescription`, `NSAppTransportSecurity` local-networking exception | Info.plist + Signing & Capabilities | Xcode |
-| iOS tracker | Reachable API base URL (LAN IP or tunnel) | `RunHackTrackerApp.apiBaseURL` | your dev machine |
+| Live Tracker | **No API key of any kind** — Geolocation, Web Audio and SpeechSynthesis are built into the browser | `src/web/TrackerPanel.tsx` | — |
+| Live Tracker (phone) | An HTTPS origin (tunnel or deployment) — browsers only expose GPS on HTTPS or `localhost` | serving the built UI | ngrok / cloudflared / any host |
 
 Nothing above is required to run the prototype: every provider falls back to a mock.
 
@@ -209,24 +211,61 @@ speaking pace. Imports are de-duplicated by Strava activity id, so syncing twice
 Tokens are held in memory and refreshed on expiry; `STRAVA_REFRESH_TOKEN` seeds a connected
 account at boot. Without credentials the mock provider serves three fixture runs.
 
-## Tracking approach: Strava now, Swift later
+## Live Tracker (browser GPS + Web Audio)
 
-The leaderboard needs a real source of distance/speed. Two options were considered:
+`navigator.geolocation.watchPosition` feeds fixes into `src/web/tracking/geoTrack.ts`, which is
+pure and unit-tested: haversine distance, fixes worse than 50m accuracy discarded, sub-2m jitter
+ignored, and pace derived from a 45s rolling window rather than `coords.speed` (null on most
+desktops, jittery on phones). Every 15s the rolling pace is POSTed to
+`/api/sessions/:id/samples`, so the existing threshold/debounce/cooldown engine decides when a
+roast fires — the tracker adds no roast logic of its own.
 
-- **Strava integration (implemented, runnable).** Pure TypeScript inside the existing adapter
-  pattern, testable with an injected `fetch`, mockable end to end, and it inherits every run a
-  user already records with a watch or phone. Cost: activities appear post-run, so it feeds the
-  leaderboard but cannot drive live roasts.
-- **Native Swift tracker (prototyped, not built).** The only way to get live location/pace for
-  in-run roasting, but it needs macOS + Xcode, an Apple Developer team, device signing and
-  background-location entitlements — none of which exist in this environment, so nothing could
-  be compiled or verified. The sources in `ios/RunHackTracker/` are a head start, not an app.
+Audio goes through one `AudioContext` created inside the Start click handler (mobile browsers
+mute audio started anywhere else): roast WAVs are fetched and played with `decodeAudioData`,
+short oscillator cues mark start/finish/slowdown, and `speechSynthesis` reads the roast aloud if
+the clip is missing. **Finish run** posts the run to `/api/activities` with `source: 'web'`.
 
-So Strava is the working prototype and the Swift app is the follow-up: finish it on a Mac to
-unlock live roasting, and keep Strava as the backfill for runs tracked on other devices.
-Follow-ups: persist activities and Strava tokens (currently in-memory), add Strava webhook
-push instead of manual sync, per-user identity so imported activities map to real accounts,
-and an offline sample queue in the iOS app.
+### Running and testing it (5 minutes)
+
+1. `npm run dev`, open <http://localhost:5173> → **📍 Live Tracker**.
+2. Desktop, no permissions: tick **Simulated GPS**, set a pace slower than the session target
+   (e.g. `6:30`), **Start run**. Distance/pace tick up, roasts appear and play within ~15s of
+   simulated time; **Finish run** then shows the run on the 🏆 Leaderboard tagged `web`.
+3. Real GPS on a phone: the page must be on **HTTPS** (or `localhost`) — `npm run build && npm start`,
+   expose :8787 with `ngrok http 8787`, open the https URL, **Allow** the location prompt, then
+   *Add to Home Screen* to install the PWA.
+
+### Browser requirements
+
+- **Secure context**: Geolocation is only available on HTTPS or `localhost`; the panel detects
+  `window.isSecureContext` and says so instead of failing silently.
+- **Location permission**: prompted on first Start; if denied the panel explains how to recover
+  and simulated GPS still works.
+- **Audio autoplay**: the AudioContext is unlocked by the Start click; audio may stay silent if
+  the run is started programmatically or the device is on silent (iOS honours the ringer switch).
+- **Foreground tab**: browsers throttle timers and GPS in background tabs, so keep the screen on.
+  This is the main functional gap vs. a native app.
+
+## Tracking approach: browser PWA + Strava (native app dropped)
+
+The leaderboard needs a real source of distance/speed. Three options were weighed:
+
+- **Browser Geolocation PWA (implemented).** Live pace during the run — enough to drive roasts —
+  with zero credentials, zero app-store review, and no Apple Developer account. It runs on the
+  same TypeScript/React stack as the rest of the app and is testable in minutes. Cost: no reliable
+  background tracking, and the screen must stay awake.
+- **Strava import (implemented).** Best fidelity for completed runs and inherits everything the
+  user already records on a watch, but activities only exist post-run, so it cannot roast live.
+- **Native Swift app (dropped).** Would give background GPS, but needs macOS + Xcode, an Apple
+  Developer team, signing and entitlements, plus review before anyone else can run it — far too
+  much overhead for a prototype, so the earlier Swift sources were removed.
+
+The two implemented paths are complementary: the PWA roasts you mid-run, Strava backfills runs
+tracked elsewhere, and both land in the same leaderboard.
+
+Follow-ups: persist activities and Strava tokens (currently in-memory), a Wake Lock + offline
+sample queue so a backgrounded tab does not lose data, Strava webhooks instead of manual sync,
+and per-user identity so imported activities map to real accounts.
 
 ## Trigger semantics
 
@@ -241,5 +280,5 @@ and an offline sample queue in the iOS app.
 
 ## Status & limitations
 
-The iOS tracker has never been compiled (no Xcode on this machine) — see `ios/RunHackTracker/README.md`.
-State is in-memory (restart or `POST /api/demo/reset` clears it) — the store and audio store are deliberately narrow interfaces to swap for Postgres/S3. The Healf and Poke request/response shapes are best-effort prototypes and may need adjusting to the real sponsor/webhook contracts; both are one-file changes inside `src/server/adapters/`.
+The tracker was verified with simulated GPS in a desktop browser; real-device GPS accuracy and
+background behaviour are untested. State is in-memory (restart or `POST /api/demo/reset` clears it) — the store and audio store are deliberately narrow interfaces to swap for Postgres/S3. The Healf and Poke request/response shapes are best-effort prototypes and may need adjusting to the real sponsor/webhook contracts; both are one-file changes inside `src/server/adapters/`.

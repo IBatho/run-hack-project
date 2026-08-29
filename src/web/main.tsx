@@ -11,3 +11,11 @@ createRoot(container).render(
     <App />
   </React.StrictMode>,
 );
+
+// Installability only; the worker is a no-op for /api/ requests. Registered in
+// production builds only so the Vite dev server keeps hot-reloading normally.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+  });
+}

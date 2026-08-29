@@ -253,8 +253,8 @@ export function createApp(deps: AppDeps = {}): AppContext {
     if (!runnerName || typeof runnerName !== 'string') return bad(res, 'runnerName is required');
     if (distanceKm === undefined || distanceKm <= 0) return bad(res, 'distanceKm must be positive');
     if (durationSec === undefined || durationSec <= 0) return bad(res, 'durationSec must be positive');
-    if (source !== undefined && source !== 'manual' && source !== 'strava' && source !== 'ios') {
-      return bad(res, "source must be 'manual', 'strava' or 'ios'");
+    if (source !== undefined && source !== 'manual' && source !== 'strava' && source !== 'web') {
+      return bad(res, "source must be 'manual', 'strava' or 'web'");
     }
     const activity = activityService.record({
       runnerName,

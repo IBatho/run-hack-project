@@ -16,7 +16,7 @@ export interface LeaderboardInput {
   sinceMs?: number;
 }
 
-const SOURCE_ORDER: ActivitySource[] = ['manual', 'strava', 'ios'];
+const SOURCE_ORDER: ActivitySource[] = ['manual', 'strava', 'web'];
 
 interface Accumulator {
   runnerName: string;

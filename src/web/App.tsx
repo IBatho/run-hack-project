@@ -4,8 +4,9 @@ import { api } from './api.js';
 import { BetPanel } from './BetPanel.js';
 import { LeaderboardPanel } from './LeaderboardPanel.js';
 import { RoastPanel } from './RoastPanel.js';
+import { TrackerPanel } from './TrackerPanel.js';
 
-type Tab = 'roast' | 'bet' | 'leaderboard';
+type Tab = 'roast' | 'bet' | 'tracker' | 'leaderboard';
 
 export function App() {
   const [tab, setTab] = useState<Tab>('roast');
@@ -34,7 +35,7 @@ export function App() {
       <header className="topbar">
         <div>
           <h1>Run Hack</h1>
-          <p className="subtitle">Audio Roast Engine · Ghost Pacer Bet · Leaderboard</p>
+          <p className="subtitle">Audio Roast Engine · Ghost Pacer Bet · Live Tracker · Leaderboard</p>
         </div>
         <div className="providers">
           {providers &&
@@ -58,6 +59,9 @@ export function App() {
         <button className={tab === 'bet' ? 'tab tab--active' : 'tab'} onClick={() => setTab('bet')}>
           👻 Ghost Pacer Bet
         </button>
+        <button className={tab === 'tracker' ? 'tab tab--active' : 'tab'} onClick={() => setTab('tracker')}>
+          📍 Live Tracker
+        </button>
         <button
           className={tab === 'leaderboard' ? 'tab tab--active' : 'tab'}
           onClick={() => setTab('leaderboard')}
@@ -69,6 +73,7 @@ export function App() {
       <main>
         {tab === 'roast' && <RoastPanel reloadKey={reloadKey} />}
         {tab === 'bet' && <BetPanel reloadKey={reloadKey} />}
+        {tab === 'tracker' && <TrackerPanel reloadKey={reloadKey} />}
         {tab === 'leaderboard' && <LeaderboardPanel reloadKey={reloadKey} />}
       </main>
     </div>

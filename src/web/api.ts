@@ -1,4 +1,5 @@
 import type {
+  ActivitySource,
   Bet,
   LeaderboardEntry,
   LeaderboardMetric,
@@ -87,6 +88,7 @@ export const api = {
     distanceKm: number;
     durationSec: number;
     name?: string;
+    source?: ActivitySource;
   }) => request<{ activity: RunActivity }>('/api/activities', { method: 'POST', body: JSON.stringify(input) }),
 
   stravaStatus: () => request<{ strava: StravaStatus }>('/api/strava/status'),
