@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatPace, parsePace } from '../shared/pace.js';
 import type { PaceSample, Roast } from '../shared/types.js';
-import { api, type SessionWithThreshold } from './api.js';
+import { api, clipUrl, type SessionWithThreshold } from './api.js';
 
 /** Pace series used by the scripted demo: on target, then a slow patch. */
 const DEMO_SERIES: Array<{ paceSecPerKm: number; distanceKm: number }> = [
@@ -44,7 +44,7 @@ export function RoastPanel({ reloadKey }: { reloadKey: number }) {
     const latest = roasts[0];
     if (!autoplay || !latest?.audio || lastPlayedRef.current === latest.id) return;
     lastPlayedRef.current = latest.id;
-    void new Audio(latest.audio.url).play().catch(() => undefined);
+    void new Audio(clipUrl(latest.audio.url)).play().catch(() => undefined);
   }, [roasts, autoplay]);
 
   const patch = async (changes: Partial<SessionWithThreshold>) => {
@@ -225,7 +225,7 @@ export function RoastPanel({ reloadKey }: { reloadKey: number }) {
             </div>
             <p>{roast.text}</p>
             {roast.audio ? (
-              <audio controls src={roast.audio.url} />
+              <audio controls src={clipUrl(roast.audio.url)} />
             ) : (
               <p className="error-inline">Audio failed: {roast.audioError}</p>
             )}

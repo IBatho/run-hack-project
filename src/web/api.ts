@@ -26,6 +26,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body;
 }
 
+/**
+ * Clip URLs are absolute (PUBLIC_BASE_URL) because outbound webhooks need them
+ * that way; in the browser play them from this origin so an HTTPS page served
+ * through a tunnel or deployment doesn't hit mixed content.
+ */
+export function clipUrl(url: string): string {
+  try {
+    return new URL(url, window.location.origin).pathname;
+  } catch {
+    return url;
+  }
+}
+
 export const api = {
   health: () => request<{ ok: boolean; mockMode: boolean; providers: ProviderStatus }>('/api/health'),
 

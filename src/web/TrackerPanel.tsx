@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatPace, parsePace } from '../shared/pace.js';
 import type { Roast } from '../shared/types.js';
-import { api, type SessionWithThreshold } from './api.js';
+import { api, clipUrl, type SessionWithThreshold } from './api.js';
 import { AudioCues } from './tracking/audioCues.js';
 import {
   applyFix,
@@ -67,9 +67,10 @@ export function TrackerPanel({ reloadKey }: { reloadKey: number }) {
         if (!roast) return;
         setRoasts((current) => [roast, ...current]);
         cues.cue('slow');
-        if (roast.audio) {
-          await cues.playClip(roast.audio.url);
-        } else {
+        try {
+          if (!roast.audio) throw new Error('no clip');
+          await cues.playClip(clipUrl(roast.audio.url));
+        } catch {
           cues.speak(roast.text);
         }
       } catch (err) {

@@ -285,8 +285,14 @@ audio {
   color: var(--danger);
 }
 
+.board-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .board {
   width: 100%;
+  min-width: max-content;
   border-collapse: collapse;
   font-size: 14px;
 }

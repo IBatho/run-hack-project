@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { formatPace, parsePace } from '../shared/pace.js';
 import type { Bet, PokeDelivery } from '../shared/types.js';
-import { api } from './api.js';
+import { api, clipUrl } from './api.js';
 
 export function BetPanel({ reloadKey }: { reloadKey: number }) {
   const [bets, setBets] = useState<Bet[]>([]);
@@ -174,7 +174,7 @@ export function BetPanel({ reloadKey }: { reloadKey: number }) {
               <h3>Confession voice note</h3>
               <p>{selected.confession.text}</p>
               {selected.confession.audio ? (
-                <audio controls src={selected.confession.audio.url} />
+                <audio controls src={clipUrl(selected.confession.audio.url)} />
               ) : (
                 <p className="error-inline">Audio failed: {selected.confession.audioError}</p>
               )}
@@ -204,7 +204,7 @@ export function BetPanel({ reloadKey }: { reloadKey: number }) {
               </span>
             </div>
             <p>{delivery.text}</p>
-            {delivery.audioUrl && <audio controls src={delivery.audioUrl} />}
+            {delivery.audioUrl && <audio controls src={clipUrl(delivery.audioUrl)} />}
             {delivery.error && <p className="error-inline">{delivery.error}</p>}
           </article>
         ))}

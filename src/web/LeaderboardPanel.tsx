@@ -100,38 +100,40 @@ export function LeaderboardPanel({ reloadKey }: { reloadKey: number }) {
         </div>
         {entries.length === 0 && <p className="muted">No runs logged yet.</p>}
         {entries.length > 0 && (
-          <table className="board">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Runner</th>
-                <th>Runs</th>
-                <th>Distance</th>
-                <th>Avg pace</th>
-                <th>Best pace</th>
-                <th>Roasts</th>
-                <th>Bets W/M</th>
-                <th>Sources</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry) => (
-                <tr key={entry.runnerName}>
-                  <td>{entry.rank}</td>
-                  <td>{entry.runnerName}</td>
-                  <td>{entry.runCount}</td>
-                  <td>{entry.totalDistanceKm}km</td>
-                  <td>{entry.avgPaceSecPerKm === null ? '—' : formatPace(entry.avgPaceSecPerKm)}</td>
-                  <td>{entry.bestPaceSecPerKm === null ? '—' : formatPace(entry.bestPaceSecPerKm)}</td>
-                  <td>{entry.roastCount}</td>
-                  <td>
-                    {entry.betsWon}/{entry.betsMissed}
-                  </td>
-                  <td className="muted">{entry.sources.join(', ') || '—'}</td>
+          <div className="board-scroll">
+            <table className="board">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Runner</th>
+                  <th>Runs</th>
+                  <th>Distance</th>
+                  <th>Avg pace</th>
+                  <th>Best pace</th>
+                  <th>Roasts</th>
+                  <th>Bets W/M</th>
+                  <th>Sources</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {entries.map((entry) => (
+                  <tr key={entry.runnerName}>
+                    <td>{entry.rank}</td>
+                    <td>{entry.runnerName}</td>
+                    <td>{entry.runCount}</td>
+                    <td>{entry.totalDistanceKm}km</td>
+                    <td>{entry.avgPaceSecPerKm === null ? '—' : formatPace(entry.avgPaceSecPerKm)}</td>
+                    <td>{entry.bestPaceSecPerKm === null ? '—' : formatPace(entry.bestPaceSecPerKm)}</td>
+                    <td>{entry.roastCount}</td>
+                    <td>
+                      {entry.betsWon}/{entry.betsMissed}
+                    </td>
+                    <td className="muted">{entry.sources.join(', ') || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
         {status && <p className="status">{status}</p>}
       </section>
