@@ -1,12 +1,24 @@
 import type { ProviderMode } from '../../shared/types.js';
 import type { AppConfig } from '../config.js';
 import { modeFor } from '../config.js';
+import type { VoiceIntensity } from '../domain/copy.js';
 import { estimateSpeechDurationMs, synthesizeWav } from './wav.js';
 
 export interface SynthesisRequest {
   text: string;
   voiceId: string;
+  /** Shapes delivery: `aggressive` is the shouted drill-coach read. */
+  intensity?: VoiceIntensity;
 }
+
+/**
+ * ElevenLabs voice settings per intensity. The aggressive read drops stability
+ * and pushes style so the delivery is shouted and uneven rather than smooth.
+ */
+export const VOICE_SETTINGS: Record<VoiceIntensity, Record<string, number>> = {
+  normal: { stability: 0.35, similarity_boost: 0.8, style: 0.6 },
+  aggressive: { stability: 0.15, similarity_boost: 0.85, style: 0.95 },
+};
 
 export interface SynthesisResult {
   audio: Buffer;
@@ -46,7 +58,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     private readonly fetchImpl: FetchLike = fetch,
   ) {}
 
-  async synthesize({ text, voiceId }: SynthesisRequest): Promise<SynthesisResult> {
+  async synthesize({ text, voiceId, intensity }: SynthesisRequest): Promise<SynthesisResult> {
     const url = `${this.options.baseUrl}/v1/text-to-speech/${voiceId}`;
     let response: Response;
     try {
@@ -60,7 +72,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
         body: JSON.stringify({
           text,
           model_id: this.options.modelId,
-          voice_settings: { stability: 0.35, similarity_boost: 0.8, style: 0.6 },
+          voice_settings: VOICE_SETTINGS[intensity ?? 'normal'],
         }),
       });
     } catch (cause) {
@@ -90,13 +102,13 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
 export class MockVoiceProvider implements VoiceProvider {
   readonly mode: ProviderMode = 'mock';
 
-  async synthesize({ text, voiceId }: SynthesisRequest): Promise<SynthesisResult> {
+  async synthesize({ text, voiceId, intensity }: SynthesisRequest): Promise<SynthesisResult> {
     return {
-      audio: synthesizeWav(text),
+      audio: synthesizeWav(text, { intensity: intensity ?? 'normal' }),
       mimeType: 'audio/wav',
       provider: 'mock',
       voiceId,
-      durationMsEstimate: estimateSpeechDurationMs(text),
+      durationMsEstimate: estimateSpeechDurationMs(text, { intensity: intensity ?? 'normal' }),
     };
   }
 }

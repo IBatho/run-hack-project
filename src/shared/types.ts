@@ -2,6 +2,20 @@
 
 export type ProviderMode = 'live' | 'mock';
 
+/**
+ * Coaching personality used to compose and voice a roast.
+ *
+ * - `roast`: dry, sarcastic wind-up (the original prototype tone).
+ * - `drill`: an original aggressive coach — shouted, relentless, motivational.
+ *   It is a persona of this app, not an impression of any real person.
+ */
+export type CoachMode = 'roast' | 'drill';
+
+export const COACH_MODES: readonly CoachMode[] = ['roast', 'drill'];
+
+export const isCoachMode = (value: unknown): value is CoachMode =>
+  typeof value === 'string' && (COACH_MODES as readonly string[]).includes(value);
+
 /** A configured runner session that the Audio Roast Engine monitors. */
 export interface RunSession {
   id: string;
@@ -16,6 +30,8 @@ export interface RunSession {
   cooldownSec: number;
   /** ElevenLabs voice id used for this session's roasts. */
   voiceId: string;
+  /** Coaching personality applied to copy and voice settings. */
+  coachMode: CoachMode;
   /** Whether Healf sponsor hooks are woven into roast copy. */
   sponsorEnabled: boolean;
   createdAt: string;
@@ -54,6 +70,8 @@ export interface Roast {
   id: string;
   sessionId: string;
   trigger: RoastTrigger;
+  /** Personality the copy and audio were generated with. */
+  coachMode: CoachMode;
   text: string;
   paceSecPerKm: number | null;
   targetPaceSecPerKm: number;

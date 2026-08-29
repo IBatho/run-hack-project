@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatPace, parsePace } from '../shared/pace.js';
-import type { PaceSample, Roast } from '../shared/types.js';
+import type { CoachMode, PaceSample, Roast } from '../shared/types.js';
 import { api, clipUrl, type SessionWithThreshold } from './api.js';
 
 /** Pace series used by the scripted demo: on target, then a slow patch. */
@@ -12,6 +12,11 @@ const DEMO_SERIES: Array<{ paceSecPerKm: number; distanceKm: number }> = [
   { paceSecPerKm: 352, distanceKm: 5 },
   { paceSecPerKm: 296, distanceKm: 6 },
 ];
+
+const COACH_MODE_LABEL: Record<CoachMode, string> = {
+  roast: '😏 Roast — dry and sarcastic',
+  drill: '🪖 Drill — aggressive, shouted motivation',
+};
 
 export function RoastPanel({ reloadKey }: { reloadKey: number }) {
   const [session, setSession] = useState<SessionWithThreshold | null>(null);
@@ -67,6 +72,21 @@ export function RoastPanel({ reloadKey }: { reloadKey: number }) {
         ? `🔥 Roast fired (${result.decision.reason}) at ${formatPace(paceSecPerKm)}`
         : `No roast: ${result.decision.reason} at ${formatPace(paceSecPerKm)}`,
     );
+  };
+
+  const generateNow = (mode?: CoachMode) => {
+    if (!session) return;
+    api
+      .manualRoast(session.id, {
+        text: customRoast || undefined,
+        paceSecPerKm: parsePace(paceInput),
+        coachMode: mode,
+      })
+      .then(({ roast }) => {
+        setRoasts((prev) => [roast, ...prev]);
+        setStatus(roast.coachMode === 'drill' ? '🪖 Drill coach fired' : '🎙️ Manual roast generated');
+      })
+      .catch((err: Error) => setStatus(err.message));
   };
 
   const runDemo = async () => {
@@ -135,6 +155,25 @@ export function RoastPanel({ reloadKey }: { reloadKey: number }) {
             onChange={(e) => patch({ cooldownSec: Number(e.target.value) })}
           />
         </label>
+        <label>
+          Coach mode
+          <select
+            value={session.coachMode}
+            onChange={(e) => patch({ coachMode: e.target.value as CoachMode })}
+          >
+            {(Object.keys(COACH_MODE_LABEL) as CoachMode[]).map((mode) => (
+              <option key={mode} value={mode}>
+                {COACH_MODE_LABEL[mode]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {session.coachMode === 'drill' && (
+          <p className="muted">
+            Drill mode is an original aggressive coach persona: shouted, relentless, and pointed at
+            your next kilometre. Louder audio — check your volume.
+          </p>
+        )}
         <label className="checkbox">
           <input
             type="checkbox"
@@ -184,21 +223,14 @@ export function RoastPanel({ reloadKey }: { reloadKey: number }) {
             onChange={(e) => setCustomRoast(e.target.value)}
           />
         </label>
-        <button
-          className="secondary"
-          disabled={busy}
-          onClick={() =>
-            api
-              .manualRoast(session.id, { text: customRoast || undefined, paceSecPerKm: parsePace(paceInput) })
-              .then(({ roast }) => {
-                setRoasts((prev) => [roast, ...prev]);
-                setStatus('🎙️ Manual roast generated');
-              })
-              .catch((err: Error) => setStatus(err.message))
-          }
-        >
-          Generate roast now
-        </button>
+        <div className="row">
+          <button className="secondary" disabled={busy} onClick={() => generateNow()}>
+            Generate roast now
+          </button>
+          <button className="secondary" disabled={busy} onClick={() => generateNow('drill')}>
+            🪖 Drill me now
+          </button>
+        </div>
         <label className="checkbox">
           <input type="checkbox" checked={autoplay} onChange={(e) => setAutoplay(e.target.checked)} />
           Auto-play newest roast
@@ -218,6 +250,9 @@ export function RoastPanel({ reloadKey }: { reloadKey: number }) {
             <div className="roast__meta">
               <span className={`badge badge--${roast.trigger === 'threshold' ? 'live' : 'mock'}`}>
                 {roast.trigger}
+              </span>
+              <span className={`badge badge--${roast.coachMode === 'drill' ? 'drill' : 'mock'}`}>
+                {roast.coachMode === 'drill' ? '🪖 drill' : '😏 roast'}
               </span>
               {roast.paceSecPerKm && <span className="muted">{formatPace(roast.paceSecPerKm)}</span>}
               {roast.sponsorHook && <span className="badge badge--sponsor">{roast.sponsorHook.sponsor}</span>}

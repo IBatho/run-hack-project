@@ -1,6 +1,7 @@
 import type {
   ActivitySource,
   Bet,
+  CoachMode,
   LeaderboardEntry,
   LeaderboardMetric,
   PaceSample,
@@ -71,7 +72,7 @@ export const api = {
       { method: 'POST', body: JSON.stringify(input) },
     ),
 
-  manualRoast: (id: string, input: { text?: string; paceSecPerKm?: number }) =>
+  manualRoast: (id: string, input: { text?: string; paceSecPerKm?: number; coachMode?: CoachMode }) =>
     request<{ roast: Roast }>(`/api/sessions/${id}/roasts`, {
       method: 'POST',
       body: JSON.stringify(input),

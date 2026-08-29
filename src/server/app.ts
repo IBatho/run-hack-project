@@ -1,5 +1,6 @@
 import express, { type Express, type Request, type Response } from 'express';
-import type { LeaderboardMetric, ProviderStatus } from '../shared/types.js';
+import type { CoachMode, LeaderboardMetric, ProviderStatus } from '../shared/types.js';
+import { isCoachMode } from '../shared/types.js';
 import { createGroupMessenger } from './adapters/poke.js';
 import { createCoachChannel } from './adapters/pokeAi.js';
 import { createSponsorProvider } from './adapters/healf.js';
@@ -41,6 +42,14 @@ const number = (value: unknown): number | undefined => {
 
 const bad = (res: Response, message: string) => res.status(400).json({ error: message });
 
+/** `undefined` when absent, `null` when present but not a known coach mode. */
+const coachMode = (value: unknown): CoachMode | null | undefined => {
+  if (value === undefined || value === null || value === '') return undefined;
+  return isCoachMode(value) ? value : null;
+};
+
+const COACH_MODE_ERROR = "coachMode must be 'roast' or 'drill'";
+
 export function createApp(deps: AppDeps = {}): AppContext {
   const config = deps.config ?? loadConfig();
   const fetchImpl = deps.fetchImpl ?? fetch;
@@ -60,7 +69,11 @@ export function createApp(deps: AppDeps = {}): AppContext {
 
   const store = new RunStore();
   const audioStore = new AudioStore(config.publicBaseUrl);
-  const roastService = new RoastService(store, voice, sponsor, audioStore, config.elevenLabs.defaultVoiceId);
+  const roastService = new RoastService(store, voice, sponsor, audioStore, {
+    defaultVoiceId: config.elevenLabs.defaultVoiceId,
+    drillVoiceId: config.elevenLabs.drillVoiceId,
+    defaultCoachMode: config.coach.defaultMode,
+  });
   const betService = new BetService(store, voice, messenger, audioStore, config.elevenLabs.defaultVoiceId);
   const activityService = new ActivityService(
     store,
@@ -109,6 +122,8 @@ export function createApp(deps: AppDeps = {}): AppContext {
     if (!targetPaceSecPerKm || targetPaceSecPerKm <= 0) {
       return bad(res, 'targetPaceSecPerKm must be a positive number of seconds per km');
     }
+    const mode = coachMode(req.body?.coachMode);
+    if (mode === null) return bad(res, COACH_MODE_ERROR);
     const session = roastService.createSession({
       runnerName,
       targetPaceSecPerKm,
@@ -116,6 +131,7 @@ export function createApp(deps: AppDeps = {}): AppContext {
       debounceSamples: number(req.body?.debounceSamples),
       cooldownSec: number(req.body?.cooldownSec),
       voiceId: req.body?.voiceId,
+      coachMode: mode,
       sponsorEnabled: req.body?.sponsorEnabled,
     });
     return res.status(201).json({ session });
@@ -135,6 +151,8 @@ export function createApp(deps: AppDeps = {}): AppContext {
   app.patch('/api/sessions/:id', (req, res) => {
     const session = store.getSession(req.params.id);
     if (!session) return res.status(404).json({ error: 'session not found' });
+    const mode = coachMode(req.body?.coachMode);
+    if (mode === null) return bad(res, COACH_MODE_ERROR);
     const updated = roastService.updateSession(session, {
       runnerName: req.body?.runnerName,
       targetPaceSecPerKm: number(req.body?.targetPaceSecPerKm),
@@ -142,6 +160,7 @@ export function createApp(deps: AppDeps = {}): AppContext {
       debounceSamples: number(req.body?.debounceSamples),
       cooldownSec: number(req.body?.cooldownSec),
       voiceId: req.body?.voiceId,
+      coachMode: mode,
       sponsorEnabled: req.body?.sponsorEnabled,
     });
     return res.json({ session: { ...updated, thresholdSecPerKm: paceThreshold(updated) } });
@@ -169,11 +188,14 @@ export function createApp(deps: AppDeps = {}): AppContext {
     try {
       const session = store.getSession(req.params.id);
       if (!session) return res.status(404).json({ error: 'session not found' });
+      const mode = coachMode(req.body?.coachMode);
+      if (mode === null) return bad(res, COACH_MODE_ERROR);
       const roast = await roastService.createRoast(session, {
         trigger: 'manual',
         paceSecPerKm: number(req.body?.paceSecPerKm) ?? null,
         text: req.body?.text,
         seed: number(req.body?.seed),
+        coachMode: mode,
       });
       return res.status(201).json({ roast });
     } catch (error) {

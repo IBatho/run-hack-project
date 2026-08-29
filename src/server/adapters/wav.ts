@@ -5,7 +5,23 @@
  * which sounds like muffled speech rather than a flat beep.
  */
 
+import type { VoiceIntensity } from '../domain/copy.js';
+
 const SAMPLE_RATE = 22_050;
+
+/**
+ * Mock-voice shaping per intensity: the aggressive read is louder, pitched up
+ * and delivered faster, so drill mode is audibly different with no API key.
+ */
+const INTENSITY = {
+  normal: { wordsPerSecond: 2.6, pitchHz: 110, amplitude: 12_000 },
+  aggressive: { wordsPerSecond: 3.2, pitchHz: 165, amplitude: 24_000 },
+} as const satisfies Record<VoiceIntensity, { wordsPerSecond: number; pitchHz: number; amplitude: number }>;
+
+export interface SynthesisOptions {
+  intensity?: VoiceIntensity;
+}
+
 const VOWEL_FORMANTS: Array<[number, number]> = [
   [700, 1220], // a
   [400, 1900], // e
@@ -23,16 +39,18 @@ const hash = (text: string): number => {
   return Math.abs(h);
 };
 
-export function estimateSpeechDurationMs(text: string): number {
+export function estimateSpeechDurationMs(text: string, options: SynthesisOptions = {}): number {
   const words = text.trim().split(/\s+/).filter(Boolean).length;
-  return Math.round(Math.max(600, (words / 2.6) * 1000));
+  const { wordsPerSecond } = INTENSITY[options.intensity ?? 'normal'];
+  return Math.round(Math.max(600, (words / wordsPerSecond) * 1000));
 }
 
 /** Renders `text` into a mono 16-bit PCM WAV buffer. */
-export function synthesizeWav(text: string): Buffer {
+export function synthesizeWav(text: string, options: SynthesisOptions = {}): Buffer {
   const words = text.trim().split(/\s+/).filter(Boolean);
   const seed = hash(text);
-  const durationMs = estimateSpeechDurationMs(text);
+  const shape = INTENSITY[options.intensity ?? 'normal'];
+  const durationMs = estimateSpeechDurationMs(text, options);
   const totalSamples = Math.round((durationMs / 1000) * SAMPLE_RATE);
   const samples = new Int16Array(totalSamples);
   const syllables = Math.max(1, Math.round(words.length * 1.4));
@@ -45,12 +63,12 @@ export function synthesizeWav(text: string): Buffer {
     // Attack/decay envelope with a short silent gap between syllables.
     const envelope = posInSyllable > 0.82 ? 0 : Math.sin(Math.PI * (posInSyllable / 0.82));
     const t = i / SAMPLE_RATE;
-    const pitch = 110 + ((seed + syllable) % 40);
+    const pitch = shape.pitchHz + ((seed + syllable) % 40);
     const voiced =
       0.55 * Math.sin(2 * Math.PI * pitch * t) +
       0.3 * Math.sin(2 * Math.PI * f1 * t) +
       0.15 * Math.sin(2 * Math.PI * f2 * t);
-    samples[i] = Math.round(voiced * envelope * 12_000);
+    samples[i] = Math.round(voiced * envelope * shape.amplitude);
   }
 
   const dataSize = samples.length * 2;

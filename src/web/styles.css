@@ -87,6 +87,14 @@ h1 {
   color: var(--danger);
 }
 
+.badge--drill {
+  border-color: #7f1d1d;
+  background: #2a0b0b;
+  color: #fca5a5;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .badge--sponsor {
   border-color: #1e3a8a;
   background: #0b1a3a;
