@@ -35,6 +35,13 @@ verified. They are written as questions or assumptions on purpose — see
 
 ## Status
 
-Planning only. No application code exists yet; nothing here has been built or
-tested. Owners are placeholders (`@owner-*`) until the team claims them in
-[milestones and ownership](milestones-and-ownership.md).
+These docs are the product/planning layer, written independently of the prototype
+that now exists on `main` (roast engine, ghost-pacer bet, live tracker PWA, Poke
+sync, leaderboard — see the root [README](../README.md)). They therefore describe a
+plan, not the current implementation: where the two disagree, the code is the
+source of truth for *what exists* and these docs are the source of truth for *what
+we decided and why*. Scope tiers, acceptance criteria, and owner slots (`@owner-*`)
+are unclaimed and unreconciled against the prototype.
+
+Highest-value follow-up: walk [acceptance criteria](acceptance-criteria.md) against
+the shipped prototype and mark each criterion met / not met / superseded.

@@ -142,6 +142,11 @@ Q-02 decides whether the group digest is a Poke feature or a web page. Both are
 handled behind the `Notifier` interface so either answer is survivable
 (see [architecture](architecture.md)).
 
+Note: the prototype on `main` has since built against Poke's documented inbound
+message API plus an MCP server for reads — see the Poke sections of the root
+[README](../README.md) for the shapes it actually uses. Treat that code, not this
+doc, as the record of Poke's real surface.
+
 ### What we verified about agent-to-teammate messaging
 
 Checked in this repository's own tooling context, and reported precisely because it
@@ -158,7 +163,9 @@ is easy to overclaim:
   either, so chat-based teammate messaging is not available through them right now.
 - **[NOT VERIFIED]** Whether Poke itself, as a product, supports agent-initiated
   messages to arbitrary users. That is a question for Poke's own docs
-  (**[Q-01]**, **[Q-02]**), not something this repo's context can answer.
+  (**[Q-01]**, **[Q-02]**), not something this repo's context can answer. The
+  prototype's Poke adapters send to a *configured* endpoint/group, which is not
+  the same capability as addressing an arbitrary teammate.
 
 Practical consequence for the team: **PR comments and email-style GitHub
 notifications are the reliable channel; general in-app teammate messaging is not

@@ -8,8 +8,8 @@ place — a stale question costs a teammate an hour.
 
 | ID | Question | Ask | Why it matters | Owner |
 | --- | --- | --- | --- | --- |
-| Q-01 | Can a Poke assistant send **unprompted outbound** messages to a user (e.g. on a schedule), or only reply to inbound messages? | Poke docs / staff | Decides whether nudges are push or pull — a core product behaviour (S1, S2) | `@owner-sponsors` |
-| Q-02 | Can a Poke assistant message a **group**, or arbitrary other people, or only the user in the conversation? | Poke docs / staff | Decides whether the group digest is a Poke feature or a web page (S8) | `@owner-sponsors` |
+| Q-01 | Can a Poke assistant send **unprompted outbound** messages to a user (e.g. on a schedule), or only reply to inbound messages? | Poke docs / staff | Decides whether nudges are push or pull — a core product behaviour (S1, S2). **Partly addressed** by the prototype on `main`, which sends into Poke via its documented inbound message API; scheduling is still ours to build | `@owner-sponsors` |
+| Q-02 | Can a Poke assistant message a **group**, or arbitrary other people, or only the user in the conversation? | Poke docs / staff | Decides whether the group digest is a Poke feature or a web page (S8). The prototype targets a *configured* group webhook, which does not answer the arbitrary-recipient case | `@owner-sponsors` |
 | Q-06 | Does Healf expose a partner/public API usable in a hackathon? Where are the docs? | Healf booth / docs | Gates all of S4. 60-minute timebox (D-06) | `@owner-sponsors` |
 | Q-13 | Is there a sponsor-provided ElevenLabs hackathon key, and what are its limits? | Sponsor booth | Gates the entire voice track (M4) | `@owner-sponsors` |
 | Q-16 | What is the actual build window, team size, and submission deadline? | Organizers | Every timeline in [milestones](milestones-and-ownership.md) assumes 24–36 h (A-13) | `@owner-demo` |
