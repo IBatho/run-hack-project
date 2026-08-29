@@ -25,7 +25,7 @@ export function BetPanel({ reloadKey }: { reloadKey: number }) {
     const [{ bets: list }, { deliveries }] = await Promise.all([api.listBets(), api.outbox()]);
     setBets(list);
     setOutbox(deliveries);
-    setSelectedId((current) => current ?? list[0]?.id ?? null);
+    setSelectedId((current) => (list.some((bet) => bet.id === current) ? current : list[0]?.id ?? null));
   }, []);
 
   useEffect(() => {
@@ -60,7 +60,10 @@ export function BetPanel({ reloadKey }: { reloadKey: number }) {
   };
 
   const sendProgress = async (final: boolean) => {
-    if (!selected) return;
+    if (!selected) {
+      setStatus('Select a bet first.');
+      return;
+    }
     setBusy(true);
     try {
       const { evaluation } = await api.progress(selected.id, {
