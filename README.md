@@ -5,7 +5,10 @@ Runnable prototype of four hackathon features:
 1. **Audio Roast Engine** — when a runner's pace drops below a configurable target, an ElevenLabs voice roast is generated and played, with a **Healf** sponsor hook woven into the copy.
 2. **Ghost Pacer Bet** — a friend/group creates a stake with pace/distance targets; when a target is missed the runner's ElevenLabs "voice note of shame" is generated and pushed to the group via a **Poke** messaging webhook.
 3. **Live Tracker (PWA)** — a browser page that tracks distance/pace with the **Geolocation API**, streams live pace into the roast engine, and plays roasts and cues through the **Web Audio API**. Installable to a phone home screen; no app store, no Apple Developer account.
-4. **Leaderboard** — completed runs (manual, **Strava** import, or the browser tracker) are ranked by distance, best pace or roasts taken, enriched with each runner's roast and bet record.
+4. **Poke AI coaching sync** — finished runs and fired roasts are pushed to Poke's documented
+   inbound message API with structured run context, and Poke can read the leaderboard or log runs
+   back through an MCP server exposed at `/api/poke/mcp`.
+5. **Leaderboard** — completed runs (manual, **Strava** import, or the browser tracker) are ranked by distance, best pace or roasts taken, enriched with each runner's roast and bet record.
 
 Every external provider sits behind an adapter with a local mock, so the whole flow runs end to end **with no credentials**.
 
@@ -21,6 +24,8 @@ Open <http://localhost:5173>:
 - **🔥 Audio Roast Engine** tab — tune target pace / tolerance / debounce / cooldown, hit **Run scripted demo**, and the roast audio auto-plays as the pace series crosses the threshold.
 - **👻 Ghost Pacer Bet** tab — create a stake, send progress pings, then **Finish run & settle**; a missed target produces the confession audio and a Poke delivery visible in the outbox.
 - **📍 Live Tracker** tab — pick a roast session, hit **Start run**, and your rolling pace is uploaded every 15s; roasts play automatically. Tick **Simulated GPS** to demo it on a desktop with no permission prompt. **Finish run** posts the run to the leaderboard as `web`.
+- **🤖 Poke AI** tab — see the coaching outbox (every message and its context payload), send a
+  leaderboard digest, and copy the MCP URL to register in Poke.
 - **🏆 Leaderboard** tab — switch metric (distance / best pace / most roasted), log a run by hand, or **Connect** + **Sync activities** to pull runs from Strava (fixture runs in mock mode).
 
 Headless version of the same flow (API must be running):
@@ -47,7 +52,10 @@ src/server/
     healf.ts         SponsorProvider: Healf | Mock | Fallback
     poke.ts          GroupMessenger: Poke webhook (with retries) | Mock outbox
     strava.ts        ActivityProvider: Strava OAuth + activity import | Mock fixtures
+    pokeAi.ts        CoachChannel: Poke AI inbound messages (with retries) | Mock outbox
     wav.ts           offline speech-ish WAV renderer used by the mock voice
+  mcp/
+    pokeMcp.ts       MCP server Poke calls to read runs / log new ones
   services/          store (in-memory), audio store, roast + bet + activity orchestration
   app.ts             Express app factory (injectable config + fetch)
 src/web/             React prototype UI (Vite)
@@ -74,6 +82,10 @@ Copy `.env.example` to `.env`. Nothing is required — each provider independent
 | `POKE_WEBHOOK_URL` / `POKE_API_KEY` | Enables live group delivery |
 | `POKE_MAX_ATTEMPTS` | Retry budget for transient (network/5xx) webhook failures |
 | `POKE_MOCK_FAIL_ATTEMPTS` | Mock only: fail N attempts to demo the error path |
+| `POKE_AI_API_KEY` | Poke **V2** API key; enables live coaching sync (mock outbox without it) |
+| `POKE_AI_BASE_URL` / `POKE_AI_MESSAGE_PATH` | Poke inbound endpoint (defaults `https://poke.com` + `/api/v1/inbound/api-message`) |
+| `POKE_AI_MAX_ATTEMPTS` | Retry budget for transient (network/5xx) coaching sends |
+| `POKE_MCP_TOKEN` | Bearer token required on `POST /api/poke/mcp`; unset means the MCP endpoint is open |
 | `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` | Enables live Strava OAuth + activity import |
 | `STRAVA_REFRESH_TOKEN` | Optional: start already connected after a restart |
 | `STRAVA_REDIRECT_URI` | OAuth callback (default `http://localhost:8787/api/strava/callback`); host must match the app's callback domain |
@@ -91,6 +103,8 @@ Never commit real values; `.env` is gitignored.
 | Audio | `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` | same adapter; defaults ship in `config.ts` | Voice Library / model list |
 | Sponsor copy | `HEALF_API_KEY`, `HEALF_API_URL`, `HEALF_CAMPAIGN_ID` | `src/server/adapters/healf.ts` | Healf; endpoint contract still unconfirmed |
 | Group delivery | `POKE_WEBHOOK_URL`, `POKE_API_KEY` | `src/server/adapters/poke.ts` | Poke inbound webhook for the group chat |
+| Poke AI coaching sync | `POKE_AI_API_KEY` | `src/server/adapters/pokeAi.ts` (`Authorization: Bearer`) | poke.com → Settings → Advanced → API keys (V2 key; old `pk_` keys only work on the deprecated SMS webhook) |
+| Poke AI ingestion (MCP) | `POKE_MCP_TOKEN` + a public HTTPS origin | `POST /api/poke/mcp` in `src/server/app.ts` | any random string; add the URL as an MCP server in Poke |
 | Group delivery | `PUBLIC_BASE_URL` | `src/server/services/audioStore.ts` clip URLs | ngrok/cloudflared tunnel so Poke can fetch audio |
 | Strava tracking | `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET` | `src/server/adapters/strava.ts` | strava.com/settings/api → create an API application |
 | Strava tracking | `STRAVA_REDIRECT_URI` (+ matching **Authorization Callback Domain** on the Strava app) | authorize URL + `GET /api/strava/callback` | Strava app settings |
@@ -158,6 +172,54 @@ Live call: `POST {POKE_WEBHOOK_URL}` with optional `Authorization: Bearer {POKE_
 
 Network errors and 5xx are retried up to `POKE_MAX_ATTEMPTS`; 4xx is not retried. Either way a delivery record (`delivered`/`failed`, attempts, error) is returned and shown in the UI outbox — nothing throws. In mock mode deliveries land in the in-memory outbox at `GET /api/poke/outbox`.
 
+### Poke AI coaching sync (outbound)
+
+Poke's only documented programmatic ingress is `POST https://poke.com/api/v1/inbound/api-message`
+([docs](https://poke.com/docs/api)) with a bearer V2 API key and an arbitrary JSON body, where
+`message` is the instruction the agent acts on and the rest of the body reaches it as context.
+Nothing beyond that is assumed. Sent automatically when a run is recorded (`POST /api/activities`,
+including browser-tracked runs) and when the roast engine fires, plus on demand from the 🤖 Poke AI
+tab (`POST /api/poke/digest`):
+
+```json
+{
+  "message": "Isaac just finished a 10.20km run at 5:00/km. Review it against their recent runs and reply with one specific coaching cue for the next session.",
+  "source": "run-hack-project",
+  "event": "run_completed",
+  "runner": "Isaac",
+  "context": {
+    "activity": { "id": "…", "source": "web", "distance_km": 10.2, "duration_sec": 3060, "avg_pace_sec_per_km": 300, "started_at": "…" },
+    "recent_runs": [{ "distance_km": 8.1, "avg_pace_sec_per_km": 312, "source": "strava", "started_at": "…" }],
+    "leaderboard": { "rank": 1, "total_distance_km": 42.3, "avg_pace_sec_per_km": 305, "roast_count": 4 }
+  }
+}
+```
+
+`event` is `run_completed`, `roast_fired` or `digest`. Network errors and 5xx retry up to
+`POKE_AI_MAX_ATTEMPTS`; 4xx (bad key/payload) does not retry. Failures are recorded, never thrown —
+the run is still saved. Without `POKE_AI_API_KEY` the mock channel records the identical message
+locally, so the whole flow is demoable with no credentials; `GET /api/poke/status` returns the mode,
+endpoint, counters and outbox.
+
+### Poke AI ingestion (MCP server)
+
+Poke reads data from third-party services by calling an MCP server
+([docs](https://poke.com/docs/mcp-servers)), so ingestion is served at `POST /api/poke/mcp` over
+JSON-RPC 2.0 (`initialize`, `ping`, `tools/list`, `tools/call`). Tools:
+
+| Tool | Arguments | Returns |
+| --- | --- | --- |
+| `get_leaderboard` | `metric` (`distance\|pace\|roasts`), `days` | ranked entries |
+| `list_recent_runs` | `runnerName`, `limit` (≤50) | completed runs, newest first |
+| `get_runner_summary` | `runnerName` (required) | totals + that runner's last 10 runs |
+| `log_run` | `runnerName`, `distanceKm`, `durationSec` (required), `name`, `startedAt` | the created activity (`source: "poke"`) |
+
+Runs logged through MCP do **not** trigger an outbound coaching message, so Poke cannot loop back on
+itself. Set `POKE_MCP_TOKEN` and register `https://<your-host>/api/poke/mcp` in Poke; requests must
+then send `Authorization: Bearer <POKE_MCP_TOKEN>` or get a 401. The endpoint needs a public HTTPS
+origin (tunnel or deployment) before Poke can reach it — that is the only blocker to a live
+end-to-end ingestion test.
+
 ## API
 
 | Method | Path | Notes |
@@ -174,6 +236,9 @@ Network errors and 5xx are retried up to `POKE_MAX_ATTEMPTS`; 4xx is not retried
 | `GET` | `/api/poke/outbox` | delivery log |
 | `GET` | `/api/leaderboard` | ranked runners; `?metric=distance\|pace\|roasts`, `?days=N` window |
 | `GET`/`POST` | `/api/activities` | list / log a completed run |
+| `GET` | `/api/poke/status` | Poke AI mode, endpoint, MCP path, counters + coaching outbox |
+| `POST` | `/api/poke/digest` | send a leaderboard digest; optional `runnerName` |
+| `POST` | `/api/poke/mcp` | MCP JSON-RPC endpoint for Poke (bearer token if `POKE_MCP_TOKEN` is set) |
 | `GET` | `/api/strava/status` | provider mode, connection state, authorize URL |
 | `POST` | `/api/strava/connect` | exchange an authorization `code` for tokens |
 | `GET` | `/api/strava/callback` | OAuth redirect target (same exchange, `?code=`) |
@@ -216,7 +281,20 @@ account at boot. Without credentials the mock provider serves three fixture runs
 `navigator.geolocation.watchPosition` feeds fixes into `src/web/tracking/geoTrack.ts`, which is
 pure and unit-tested: haversine distance, fixes worse than 50m accuracy discarded, sub-2m jitter
 ignored, and pace derived from a 45s rolling window rather than `coords.speed` (null on most
-desktops, jittery on phones). Every 15s the rolling pace is POSTed to
+desktops, jittery on phones).
+
+Pace maths, in one place (all state in SI-ish units: km, seconds, sec/km, epoch ms):
+
+- **Rolling pace** = seconds elapsed ÷ km covered across the oldest fix at-or-before the 45s
+  window boundary, so the window length is stable instead of collapsing to the last GPS interval.
+- **Average pace** = whole-run elapsed seconds ÷ total km, reported separately in the UI.
+- Fixes are dropped when the timestamp is duplicate or out of order (zero/negative deltas never
+  reach a division), when latitude/longitude/accuracy are non-finite or out of range, or when the
+  implied speed exceeds 12 m/s (a GPS jump). Dropped fixes are counted and shown.
+- Sub-2m movement does not advance the distance anchor, so standing still decays rolling pace to
+  `—` after a full window rather than reporting a fake pace.
+
+Every 15s the rolling pace is POSTed to
 `/api/sessions/:id/samples`, so the existing threshold/debounce/cooldown engine decides when a
 roast fires — the tracker adds no roast logic of its own.
 

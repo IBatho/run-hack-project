@@ -4,7 +4,9 @@ import type {
   LeaderboardEntry,
   LeaderboardMetric,
   PaceSample,
+  PokeCoachMessage,
   PokeDelivery,
+  PokeStatus,
   ProviderStatus,
   Roast,
   RunActivity,
@@ -102,7 +104,19 @@ export const api = {
     durationSec: number;
     name?: string;
     source?: ActivitySource;
-  }) => request<{ activity: RunActivity }>('/api/activities', { method: 'POST', body: JSON.stringify(input) }),
+  }) =>
+    request<{ activity: RunActivity; coaching: PokeCoachMessage }>('/api/activities', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  pokeStatus: () => request<{ poke: PokeStatus; messages: PokeCoachMessage[] }>('/api/poke/status'),
+
+  pokeDigest: (runnerName?: string) =>
+    request<{ message: PokeCoachMessage; poke: PokeStatus }>('/api/poke/digest', {
+      method: 'POST',
+      body: JSON.stringify(runnerName ? { runnerName } : {}),
+    }),
 
   stravaStatus: () => request<{ strava: StravaStatus }>('/api/strava/status'),
 

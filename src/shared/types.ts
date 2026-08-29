@@ -126,11 +126,12 @@ export interface ProviderStatus {
   elevenlabs: ProviderMode;
   healf: ProviderMode;
   poke: ProviderMode;
+  pokeAi: ProviderMode;
   strava: ProviderMode;
 }
 
 /** Where a completed run came from. */
-export type ActivitySource = 'manual' | 'strava' | 'web';
+export type ActivitySource = 'manual' | 'strava' | 'web' | 'poke';
 
 /** A completed run that feeds the leaderboard. */
 export interface RunActivity {
@@ -162,6 +163,37 @@ export interface LeaderboardEntry {
   betsWon: number;
   betsMissed: number;
   sources: ActivitySource[];
+}
+
+/** What prompted a coaching message to Poke. */
+export type PokeCoachEvent = 'run_completed' | 'roast_fired' | 'digest';
+
+/** One coaching message pushed to Poke (or recorded by the mock channel). */
+export interface PokeCoachMessage {
+  id: string;
+  event: PokeCoachEvent;
+  runnerName: string;
+  /** Natural-language instruction Poke's agent acts on. */
+  message: string;
+  /** Structured run data forwarded alongside the instruction. */
+  context: Record<string, unknown>;
+  provider: ProviderMode;
+  status: 'delivered' | 'failed';
+  attempts: number;
+  error: string | null;
+  at: string;
+}
+
+export interface PokeStatus {
+  mode: ProviderMode;
+  /** Documented Poke inbound endpoint this build posts to (never the key). */
+  endpoint: string;
+  lastSyncAt: string | null;
+  messagesSent: number;
+  /** Path of the MCP server Poke can call to read runs and log new ones. */
+  mcpPath: string;
+  /** True when POKE_MCP_TOKEN is set and callers must send a bearer token. */
+  mcpAuthRequired: boolean;
 }
 
 export interface StravaStatus {

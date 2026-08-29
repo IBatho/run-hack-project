@@ -1,15 +1,18 @@
 import express, { type Express, type Request, type Response } from 'express';
 import type { LeaderboardMetric, ProviderStatus } from '../shared/types.js';
 import { createGroupMessenger } from './adapters/poke.js';
+import { createCoachChannel } from './adapters/pokeAi.js';
 import { createSponsorProvider } from './adapters/healf.js';
 import { createActivityProvider } from './adapters/strava.js';
 import { createVoiceProvider, type FetchLike } from './adapters/voice.js';
 import { loadConfig, type AppConfig } from './config.js';
 import { paceThreshold } from './domain/roastEngine.js';
+import { handleMcpRequest, MCP_PATH } from './mcp/pokeMcp.js';
 import { seedDemoData } from './seed.js';
 import { ActivityService } from './services/activityService.js';
 import { AudioStore } from './services/audioStore.js';
 import { BetService } from './services/betService.js';
+import { CoachService } from './services/coachService.js';
 import { RoastService } from './services/roastService.js';
 import { RunStore } from './services/store.js';
 
@@ -26,6 +29,7 @@ export interface AppContext {
   roastService: RoastService;
   betService: BetService;
   activityService: ActivityService;
+  coachService: CoachService;
   providers: ProviderStatus;
 }
 
@@ -45,10 +49,12 @@ export function createApp(deps: AppDeps = {}): AppContext {
   const sponsor = createSponsorProvider(config, fetchImpl);
   const messenger = createGroupMessenger(config, fetchImpl);
   const activityProvider = createActivityProvider(config, fetchImpl);
+  const coachChannel = createCoachChannel(config, fetchImpl);
   const providers: ProviderStatus = {
     elevenlabs: voice.mode,
     healf: sponsor.mode,
     poke: messenger.mode,
+    pokeAi: coachChannel.mode,
     strava: activityProvider.mode,
   };
 
@@ -62,6 +68,11 @@ export function createApp(deps: AppDeps = {}): AppContext {
     config.strava.runnerName,
     config.strava.refreshToken,
   );
+
+  const coachService = new CoachService(store, activityService, coachChannel, {
+    mcpPath: MCP_PATH,
+    mcpAuthRequired: Boolean(config.pokeAi.mcpToken),
+  });
 
   if (deps.seed !== false) seedDemoData(store, roastService, betService, activityService);
 
@@ -147,6 +158,7 @@ export function createApp(deps: AppDeps = {}): AppContext {
         distanceKm: number(req.body?.distanceKm) ?? 0,
         at: number(req.body?.at),
       });
+      if (result.roast) await coachService.roastFired(session, result.roast);
       return res.status(201).json(result);
     } catch (error) {
       return next(error);
@@ -246,26 +258,59 @@ export function createApp(deps: AppDeps = {}): AppContext {
     res.json({ activities: store.listActivities() });
   });
 
-  app.post('/api/activities', (req, res) => {
-    const { runnerName, name, source, sessionId, startedAt } = req.body ?? {};
-    const distanceKm = number(req.body?.distanceKm);
-    const durationSec = number(req.body?.durationSec);
-    if (!runnerName || typeof runnerName !== 'string') return bad(res, 'runnerName is required');
-    if (distanceKm === undefined || distanceKm <= 0) return bad(res, 'distanceKm must be positive');
-    if (durationSec === undefined || durationSec <= 0) return bad(res, 'durationSec must be positive');
-    if (source !== undefined && source !== 'manual' && source !== 'strava' && source !== 'web') {
-      return bad(res, "source must be 'manual', 'strava' or 'web'");
+  app.post('/api/activities', async (req, res, next) => {
+    try {
+      const { runnerName, name, source, sessionId, startedAt } = req.body ?? {};
+      const distanceKm = number(req.body?.distanceKm);
+      const durationSec = number(req.body?.durationSec);
+      if (!runnerName || typeof runnerName !== 'string') return bad(res, 'runnerName is required');
+      if (distanceKm === undefined || distanceKm <= 0) return bad(res, 'distanceKm must be positive');
+      if (durationSec === undefined || durationSec <= 0) return bad(res, 'durationSec must be positive');
+      if (source !== undefined && !['manual', 'strava', 'web', 'poke'].includes(source)) {
+        return bad(res, "source must be 'manual', 'strava', 'web' or 'poke'");
+      }
+      const activity = activityService.record({
+        runnerName,
+        distanceKm,
+        durationSec,
+        name,
+        source,
+        sessionId,
+        startedAt,
+      });
+      // Coaching sync is part of the write path so Poke sees every finished run.
+      const coaching = await coachService.runCompleted(activity);
+      return res.status(201).json({ activity, coaching });
+    } catch (error) {
+      return next(error);
     }
-    const activity = activityService.record({
-      runnerName,
-      distanceKm,
-      durationSec,
-      name,
-      source,
-      sessionId,
-      startedAt,
-    });
-    return res.status(201).json({ activity });
+  });
+
+  // --- Poke AI coaching sync ---------------------------------------------
+  app.get('/api/poke/status', (_req, res) => {
+    res.json({ poke: coachService.status(), messages: coachService.outbox() });
+  });
+
+  app.post('/api/poke/digest', async (req, res, next) => {
+    try {
+      const runnerName = typeof req.body?.runnerName === 'string' ? req.body.runnerName : undefined;
+      return res.json({ message: await coachService.digest(runnerName), poke: coachService.status() });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // MCP server Poke calls to read runs and log new ones.
+  app.post(MCP_PATH, (req, res) => {
+    if (config.pokeAi.mcpToken) {
+      const provided = req.header('authorization');
+      if (provided !== `Bearer ${config.pokeAi.mcpToken}`) {
+        return res.status(401).json({ error: 'invalid or missing bearer token' });
+      }
+    }
+    const response = handleMcpRequest(req.body ?? {}, { store, activities: activityService });
+    if (!response) return res.status(202).end();
+    return res.json(response);
   });
 
   // --- Strava tracking ----------------------------------------------------
@@ -318,5 +363,5 @@ export function createApp(deps: AppDeps = {}): AppContext {
     res.status(500).json({ error: error.message });
   });
 
-  return { app, config, store, roastService, betService, activityService, providers };
+  return { app, config, store, roastService, betService, activityService, coachService, providers };
 }

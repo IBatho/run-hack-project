@@ -23,6 +23,16 @@ export interface AppConfig {
     /** Mock mode only: fail this many attempts before succeeding (demo of retries). */
     mockFailAttempts: number;
   };
+  /** Poke AI: outbound coaching messages plus the MCP server Poke reads from. */
+  pokeAi: {
+    apiKey: string | null;
+    baseUrl: string;
+    /** Documented inbound message path; overridable for tests/self-hosting. */
+    messagePath: string;
+    maxAttempts: number;
+    /** Bearer token Poke must present when calling our MCP endpoint. */
+    mcpToken: string | null;
+  };
   strava: {
     clientId: string | null;
     clientSecret: string | null;
@@ -66,6 +76,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       apiKey: str(env.POKE_API_KEY),
       maxAttempts: num(env.POKE_MAX_ATTEMPTS, 3),
       mockFailAttempts: num(env.POKE_MOCK_FAIL_ATTEMPTS, 0),
+    },
+    pokeAi: {
+      apiKey: str(env.POKE_AI_API_KEY),
+      baseUrl: env.POKE_AI_BASE_URL?.replace(/\/$/, '') || 'https://poke.com',
+      messagePath: env.POKE_AI_MESSAGE_PATH || '/api/v1/inbound/api-message',
+      maxAttempts: num(env.POKE_AI_MAX_ATTEMPTS, 3),
+      mcpToken: str(env.POKE_MCP_TOKEN),
     },
     strava: {
       clientId: str(env.STRAVA_CLIENT_ID),

@@ -3,10 +3,11 @@ import type { ProviderStatus } from '../shared/types.js';
 import { api } from './api.js';
 import { BetPanel } from './BetPanel.js';
 import { LeaderboardPanel } from './LeaderboardPanel.js';
+import { PokePanel } from './PokePanel.js';
 import { RoastPanel } from './RoastPanel.js';
 import { TrackerPanel } from './TrackerPanel.js';
 
-type Tab = 'roast' | 'bet' | 'tracker' | 'leaderboard';
+type Tab = 'roast' | 'bet' | 'tracker' | 'leaderboard' | 'poke';
 
 export function App() {
   const [tab, setTab] = useState<Tab>('roast');
@@ -35,7 +36,7 @@ export function App() {
       <header className="topbar">
         <div>
           <h1>Run Hack</h1>
-          <p className="subtitle">Audio Roast Engine · Ghost Pacer Bet · Live Tracker · Leaderboard</p>
+          <p className="subtitle">Audio Roast Engine · Ghost Pacer Bet · Live Tracker · Leaderboard · Poke AI</p>
         </div>
         <div className="providers">
           {providers &&
@@ -68,6 +69,9 @@ export function App() {
         >
           🏆 Leaderboard
         </button>
+        <button className={tab === 'poke' ? 'tab tab--active' : 'tab'} onClick={() => setTab('poke')}>
+          🤖 Poke AI
+        </button>
       </nav>
 
       <main>
@@ -75,6 +79,7 @@ export function App() {
         {tab === 'bet' && <BetPanel reloadKey={reloadKey} />}
         {tab === 'tracker' && <TrackerPanel reloadKey={reloadKey} />}
         {tab === 'leaderboard' && <LeaderboardPanel reloadKey={reloadKey} />}
+        {tab === 'poke' && <PokePanel reloadKey={reloadKey} />}
       </main>
     </div>
   );
