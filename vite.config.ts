@@ -11,7 +11,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8787',
+      // Regex key so the frontend's own /api.ts module is not proxied.
+      '^/api/': { target: 'http://localhost:8787', changeOrigin: true },
     },
   },
 });
