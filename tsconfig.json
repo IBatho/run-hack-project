@@ -13,7 +13,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "types": ["node", "vitest/globals"],
+    "types": ["node", "vite/client", "vitest/globals"],
     "noEmit": true
   },
   "include": ["src", "tests", "scripts", "vite.config.ts"]
