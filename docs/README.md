@@ -3,6 +3,11 @@
 Planning package for the running-coach hackathon project. Start here, then read in
 order; each doc is self-contained and links onward.
 
+Building or running the app instead of reading about it? See
+[Setup, keys and deployment](setup.md) and the
+[Poke Recipe integration](poke-recipe.md), plus the [root README](../README.md)
+for what actually shipped.
+
 ## Reading order
 
 | # | Doc | What it answers |
@@ -35,6 +40,14 @@ verified. They are written as questions or assumptions on purpose — see
 
 ## Status
 
-Planning only. No application code exists yet; nothing here has been built or
-tested. Owners are placeholders (`@owner-*`) until the team claims them in
+These docs are the planning package that preceded the code; where they disagree
+with the [root README](../README.md), the README wins. Sponsor API shapes remain
+unverified. Owners are placeholders (`@owner-*`) until the team claims them in
 [milestones and ownership](milestones-and-ownership.md).
+
+Operational docs (kept current with the code):
+
+| Doc | What it answers |
+| --- | --- |
+| [Setup, keys and deployment](setup.md) | env vars, secure secret handling, ElevenLabs, Vercel, Supabase, Strava |
+| [Poke Recipe integration](poke-recipe.md) | publishing the recipe, connecting a runner, MCP + outbound messages, troubleshooting |

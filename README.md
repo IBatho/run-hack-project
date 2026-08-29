@@ -11,7 +11,7 @@ and **[docs/poke-recipe.md](docs/poke-recipe.md)**.
 
 Runnable prototype of six hackathon features:
 
-1. **Audio Roast Engine** — when a runner's pace drops below a configurable target, an ElevenLabs voice roast is generated and played, with a **Healf** sponsor hook woven into the copy.
+1. **Audio Roast Engine** — when a runner's pace drops below a configurable target, an ElevenLabs voice roast is generated and played, with a **Healf** sponsor hook woven into the copy. Two personalities: dry **roast** and shouted **drill** (see [Coach modes](#coach-modes)).
 2. **Ghost Pacer Bet** — a friend/group creates a stake with pace/distance targets; when a target is missed the runner's ElevenLabs "voice note of shame" is generated and pushed to the group via a **Poke** messaging webhook.
 3. **Live Tracker (PWA)** — a browser page that tracks distance/pace with the **Geolocation API**, streams live pace into the roast engine, and plays roasts and cues through the **Web Audio API**. Installable to a phone home screen; no app store, no Apple Developer account.
 4. **Poke AI coaching sync** — finished runs and fired roasts are pushed to Poke's documented
@@ -47,7 +47,7 @@ Other scripts: `npm test`, `npm run lint`, `npm run typecheck`, `npm run build` 
 
 ## Architecture
 
-```
+```text
 src/shared/          types + pace formatting shared by API and UI
 src/server/
   config.ts          env parsing, live-vs-mock provider selection
@@ -110,6 +110,7 @@ Never commit real values; `.env` is gitignored.
 | --- | --- | --- | --- |
 | Audio (roasts + confessions) | `ELEVENLABS_API_KEY` | `src/server/adapters/voice.ts` (`xi-api-key` header) | elevenlabs.com → Profile → API Keys |
 | Audio | `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` | same adapter; defaults ship in `config.ts` | Voice Library / model list |
+| Drill mode voice | `ELEVENLABS_DRILL_VOICE_ID` (optional), `COACH_DEFAULT_MODE` | `RoastService` voice selection / new-session default | Voice Library; pick a harder-edged voice |
 | Sponsor copy | `HEALF_API_KEY`, `HEALF_API_URL`, `HEALF_CAMPAIGN_ID` | `src/server/adapters/healf.ts` | Healf; endpoint contract still unconfirmed |
 | Group delivery | `POKE_WEBHOOK_URL`, `POKE_API_KEY` | `src/server/adapters/poke.ts` | Poke inbound webhook for the group chat |
 | Poke AI coaching sync | `POKE_AI_API_KEY` | `src/server/adapters/pokeAi.ts` (`Authorization: Bearer`) | poke.com → Settings → Advanced → API keys (V2 key; old `pk_` keys only work on the deprecated SMS webhook) |
@@ -128,6 +129,36 @@ Nothing above is required to run the prototype: every provider falls back to a m
 Live call: `POST {ELEVENLABS_BASE_URL}/v1/text-to-speech/{voiceId}` with header `xi-api-key` and body `{ text, model_id, voice_settings }`; the audio bytes are stored in memory and served from `GET /api/audio/:id`. If a live call fails, the adapter logs and falls back to the offline WAV renderer so a demo never dies mid-run.
 
 Setup: create a key at <https://elevenlabs.io> → Profile → API Keys, pick a voice id from the Voice Library, set `ELEVENLABS_API_KEY` (+ optional `ELEVENLABS_VOICE_ID`), restart.
+
+### Coach modes
+
+Every roast — threshold-fired or manual — is composed and voiced in one of two personalities
+(`coachMode` on the session, overridable per roast):
+
+| Mode | Copy | Voice |
+| --- | --- | --- |
+| `roast` (default) | dry, sarcastic wind-up (`ROASTS` in `copy.ts`) | `stability 0.35 / style 0.6`, normal pace |
+| `drill` | shouted, relentless, next-kilometre orders (`DRILL_LINES`) | `stability 0.15 / similarity 0.85 / style 0.95`, faster and louder |
+
+Drill mode is an **original persona of this app** — an aggressive coach who shouts targets and
+refuses excuses. It deliberately does not imitate, name or claim to be any real person, and a test
+asserts the copy stays clear of real-person references. Both modes interpolate the same live run
+data (runner, current pace, target pace, how far off target) and can carry the Healf sponsor hook;
+drill mode shouts the plug rather than dropping it.
+
+How to use it:
+
+- **UI** — the 🔥 Audio Roast Engine tab has a **Coach mode** selector (applies to automatic
+  threshold roasts) plus a **🪖 Drill me now** button for a single shouted roast.
+- **API** — `coachMode` is accepted on `POST /api/sessions`, `PATCH /api/sessions/:id`
+  (persistent) and `POST /api/sessions/:id/roasts` (one-off, does not change the session).
+  Anything other than `roast`/`drill` is a 400.
+- **Config** — `COACH_DEFAULT_MODE` sets the mode new sessions start in;
+  `ELEVENLABS_DRILL_VOICE_ID` routes drill audio to a second, harder-edged voice while normal
+  roasts keep `ELEVENLABS_VOICE_ID`. Both are optional.
+
+In mock mode the offline WAV renderer also shifts (higher pitch, ~2× amplitude, faster delivery),
+so the difference is audible with no ElevenLabs key.
 
 ### Healf sponsor hooks
 
@@ -234,10 +265,10 @@ end-to-end ingestion test.
 | Method | Path | Notes |
 | --- | --- | --- |
 | `GET` | `/api/health` | provider modes |
-| `GET`/`POST` | `/api/sessions` | list / create runner sessions |
-| `GET`/`PATCH` | `/api/sessions/:id` | detail (samples, roasts, threshold) / reconfigure |
+| `GET`/`POST` | `/api/sessions` | list / create runner sessions (optional `coachMode`) |
+| `GET`/`PATCH` | `/api/sessions/:id` | detail (samples, roasts, threshold, `coachMode`) / reconfigure |
 | `POST` | `/api/sessions/:id/samples` | ingest a pace sample → decision + optional roast |
-| `POST` | `/api/sessions/:id/roasts` | manual roast, optional custom `text` |
+| `POST` | `/api/sessions/:id/roasts` | manual roast, optional custom `text` and one-off `coachMode` |
 | `GET` | `/api/audio/:id` | generated audio bytes |
 | `GET`/`POST` | `/api/bets` | list / create stakes |
 | `GET` | `/api/bets/:id` | bet detail |
