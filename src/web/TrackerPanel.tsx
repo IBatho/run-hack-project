@@ -251,8 +251,12 @@ export function TrackerPanel({ reloadKey }: { reloadKey: number }) {
             <dd>{track.distanceKm.toFixed(2)} km</dd>
           </div>
           <div>
-            <dt>Pace</dt>
+            <dt>Pace (rolling)</dt>
             <dd>{track.paceSecPerKm > 0 ? formatPace(Math.round(track.paceSecPerKm)) : '—'}</dd>
+          </div>
+          <div>
+            <dt>Pace (average)</dt>
+            <dd>{track.avgPaceSecPerKm > 0 ? formatPace(Math.round(track.avgPaceSecPerKm)) : '—'}</dd>
           </div>
           <div>
             <dt>Elapsed</dt>
@@ -264,8 +268,9 @@ export function TrackerPanel({ reloadKey }: { reloadKey: number }) {
           </div>
         </dl>
         <p className="muted">
-          {track.fixes.length} fix(es) used
-          {track.rejectedFixes > 0 && ` · ${track.rejectedFixes} dropped for poor accuracy`}
+          {track.fixes.length} fix(es) in the pace window
+          {track.rejectedFixes > 0 &&
+            ` · ${track.rejectedFixes} dropped (poor accuracy, stale timestamp or impossible jump)`}
         </p>
       </section>
 
