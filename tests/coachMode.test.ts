@@ -200,4 +200,20 @@ describe('coach mode API', () => {
       .expect(201);
     expect(drill.body.roast.audio.voiceId).toBe('shouty-voice');
   });
+
+  it('falls back to the built-in drill voice when no override is configured', async () => {
+    const server = createApp({
+      config: loadConfig({ MOCK_MODE: '1', ELEVENLABS_VOICE_ID: 'calm-voice' }),
+    }).app;
+    const id = await firstSessionId(server);
+
+    const roast = await request(server).post(`/api/sessions/${id}/roasts`).send({}).expect(201);
+    expect(roast.body.roast.audio.voiceId).toBe('calm-voice');
+
+    const drill = await request(server)
+      .post(`/api/sessions/${id}/roasts`)
+      .send({ coachMode: 'drill' })
+      .expect(201);
+    expect(drill.body.roast.audio.voiceId).toBe('pNInz6obpgDQGcFmaJgB');
+  });
 });

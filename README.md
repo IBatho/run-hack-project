@@ -110,7 +110,7 @@ Never commit real values; `.env` is gitignored.
 | --- | --- | --- | --- |
 | Audio (roasts + confessions) | `ELEVENLABS_API_KEY` | `src/server/adapters/voice.ts` (`xi-api-key` header) | elevenlabs.com → Profile → API Keys |
 | Audio | `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` | same adapter; defaults ship in `config.ts` | Voice Library / model list |
-| Drill mode voice | `ELEVENLABS_DRILL_VOICE_ID` (optional), `COACH_DEFAULT_MODE` | `RoastService` voice selection / new-session default | Voice Library; pick a harder-edged voice |
+| Drill mode voice | `ELEVENLABS_DRILL_VOICE_ID` (optional, defaults to the dominant/firm "Adam" voice), `COACH_DEFAULT_MODE` | `RoastService` voice selection / new-session default | Voice Library; pick a harder-edged voice |
 | Sponsor copy | `HEALF_API_KEY`, `HEALF_API_URL`, `HEALF_CAMPAIGN_ID` | `src/server/adapters/healf.ts` | Healf; endpoint contract still unconfirmed |
 | Group delivery | `POKE_WEBHOOK_URL`, `POKE_API_KEY` | `src/server/adapters/poke.ts` | Poke inbound webhook for the group chat |
 | Poke AI coaching sync | `POKE_AI_API_KEY` | `src/server/adapters/pokeAi.ts` (`Authorization: Bearer`) | poke.com → Settings → Advanced → API keys (V2 key; old `pk_` keys only work on the deprecated SMS webhook) |
@@ -161,7 +161,8 @@ How to use it:
   Anything other than `roast`/`drill` is a 400.
 - **Config** — `COACH_DEFAULT_MODE` sets the mode new sessions start in;
   `ELEVENLABS_DRILL_VOICE_ID` routes drill audio to a second, harder-edged voice while normal
-  roasts keep `ELEVENLABS_VOICE_ID`. Both are optional.
+  roasts keep `ELEVENLABS_VOICE_ID`. Both are optional: drill mode defaults to the shared-library
+  "Adam — Dominant, Firm" voice (`pNInz6obpgDQGcFmaJgB`), so it sounds different out of the box.
 
 In mock mode the offline WAV renderer also shifts (higher pitch, ~2× amplitude, faster delivery),
 so the difference is audible with no ElevenLabs key.
