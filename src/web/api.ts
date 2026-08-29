@@ -1,4 +1,15 @@
-import type { Bet, PaceSample, PokeDelivery, ProviderStatus, Roast, RunSession } from '../shared/types.js';
+import type {
+  Bet,
+  LeaderboardEntry,
+  LeaderboardMetric,
+  PaceSample,
+  PokeDelivery,
+  ProviderStatus,
+  Roast,
+  RunActivity,
+  RunSession,
+  StravaStatus,
+} from '../shared/types.js';
 import type { BetEvaluation } from '../server/domain/betEngine.js';
 import type { RoastDecision } from '../server/domain/roastEngine.js';
 
@@ -65,6 +76,32 @@ export const api = {
     }),
 
   outbox: () => request<{ provider: string; deliveries: PokeDelivery[] }>('/api/poke/outbox'),
+
+  leaderboard: (metric: LeaderboardMetric) =>
+    request<{ metric: LeaderboardMetric; entries: LeaderboardEntry[] }>(`/api/leaderboard?metric=${metric}`),
+
+  listActivities: () => request<{ activities: RunActivity[] }>('/api/activities'),
+
+  addActivity: (input: {
+    runnerName: string;
+    distanceKm: number;
+    durationSec: number;
+    name?: string;
+  }) => request<{ activity: RunActivity }>('/api/activities', { method: 'POST', body: JSON.stringify(input) }),
+
+  stravaStatus: () => request<{ strava: StravaStatus }>('/api/strava/status'),
+
+  stravaConnect: (code: string) =>
+    request<{ strava: StravaStatus }>('/api/strava/connect', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    }),
+
+  stravaSync: (runnerName?: string) =>
+    request<{ imported: RunActivity[]; skipped: number; strava: StravaStatus }>('/api/strava/sync', {
+      method: 'POST',
+      body: JSON.stringify(runnerName ? { runnerName } : {}),
+    }),
 
   reset: () => request<{ ok: boolean }>('/api/demo/reset', { method: 'POST' }),
 };

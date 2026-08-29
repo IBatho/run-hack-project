@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ProviderStatus } from '../shared/types.js';
 import { api } from './api.js';
 import { BetPanel } from './BetPanel.js';
+import { LeaderboardPanel } from './LeaderboardPanel.js';
 import { RoastPanel } from './RoastPanel.js';
 
-type Tab = 'roast' | 'bet';
+type Tab = 'roast' | 'bet' | 'leaderboard';
 
 export function App() {
   const [tab, setTab] = useState<Tab>('roast');
@@ -33,7 +34,7 @@ export function App() {
       <header className="topbar">
         <div>
           <h1>Run Hack</h1>
-          <p className="subtitle">Audio Roast Engine · Ghost Pacer Bet</p>
+          <p className="subtitle">Audio Roast Engine · Ghost Pacer Bet · Leaderboard</p>
         </div>
         <div className="providers">
           {providers &&
@@ -57,10 +58,18 @@ export function App() {
         <button className={tab === 'bet' ? 'tab tab--active' : 'tab'} onClick={() => setTab('bet')}>
           👻 Ghost Pacer Bet
         </button>
+        <button
+          className={tab === 'leaderboard' ? 'tab tab--active' : 'tab'}
+          onClick={() => setTab('leaderboard')}
+        >
+          🏆 Leaderboard
+        </button>
       </nav>
 
       <main>
-        {tab === 'roast' ? <RoastPanel reloadKey={reloadKey} /> : <BetPanel reloadKey={reloadKey} />}
+        {tab === 'roast' && <RoastPanel reloadKey={reloadKey} />}
+        {tab === 'bet' && <BetPanel reloadKey={reloadKey} />}
+        {tab === 'leaderboard' && <LeaderboardPanel reloadKey={reloadKey} />}
       </main>
     </div>
   );

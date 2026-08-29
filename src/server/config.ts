@@ -23,6 +23,18 @@ export interface AppConfig {
     /** Mock mode only: fail this many attempts before succeeding (demo of retries). */
     mockFailAttempts: number;
   };
+  strava: {
+    clientId: string | null;
+    clientSecret: string | null;
+    /** Long-lived refresh token, so a restarted server can sync without re-authorising. */
+    refreshToken: string | null;
+    redirectUri: string;
+    baseUrl: string;
+    authBaseUrl: string;
+    scope: string;
+    /** Runner name imported activities are attributed to on the leaderboard. */
+    runnerName: string;
+  };
 }
 
 const num = (value: string | undefined, fallback: number): number => {
@@ -54,6 +66,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       apiKey: str(env.POKE_API_KEY),
       maxAttempts: num(env.POKE_MAX_ATTEMPTS, 3),
       mockFailAttempts: num(env.POKE_MOCK_FAIL_ATTEMPTS, 0),
+    },
+    strava: {
+      clientId: str(env.STRAVA_CLIENT_ID),
+      clientSecret: str(env.STRAVA_CLIENT_SECRET),
+      refreshToken: str(env.STRAVA_REFRESH_TOKEN),
+      redirectUri: env.STRAVA_REDIRECT_URI || `http://localhost:${port}/api/strava/callback`,
+      baseUrl: env.STRAVA_API_BASE_URL?.replace(/\/$/, '') || 'https://www.strava.com',
+      authBaseUrl: env.STRAVA_AUTH_BASE_URL?.replace(/\/$/, '') || 'https://www.strava.com',
+      scope: env.STRAVA_SCOPE || 'read,activity:read',
+      runnerName: env.STRAVA_RUNNER_NAME || 'Isaac',
     },
   };
 }

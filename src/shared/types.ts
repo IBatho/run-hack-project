@@ -126,4 +126,49 @@ export interface ProviderStatus {
   elevenlabs: ProviderMode;
   healf: ProviderMode;
   poke: ProviderMode;
+  strava: ProviderMode;
+}
+
+/** Where a completed run came from. */
+export type ActivitySource = 'manual' | 'strava' | 'ios';
+
+/** A completed run that feeds the leaderboard. */
+export interface RunActivity {
+  id: string;
+  /** Provider-side id (Strava activity id) used to de-duplicate imports. */
+  externalId: string | null;
+  source: ActivitySource;
+  runnerName: string;
+  /** Roast session this run was tracked under, when it came from a live session. */
+  sessionId: string | null;
+  name: string;
+  distanceKm: number;
+  durationSec: number;
+  avgPaceSecPerKm: number;
+  startedAt: string;
+}
+
+export type LeaderboardMetric = 'distance' | 'pace' | 'roasts';
+
+export interface LeaderboardEntry {
+  rank: number;
+  runnerName: string;
+  runCount: number;
+  totalDistanceKm: number;
+  /** Distance-weighted average pace across the runner's activities. */
+  avgPaceSecPerKm: number | null;
+  bestPaceSecPerKm: number | null;
+  roastCount: number;
+  betsWon: number;
+  betsMissed: number;
+  sources: ActivitySource[];
+}
+
+export interface StravaStatus {
+  mode: ProviderMode;
+  connected: boolean;
+  athleteName: string | null;
+  lastSyncAt: string | null;
+  /** Null when the client id is missing, so the UI can explain what to configure. */
+  authorizeUrl: string | null;
 }

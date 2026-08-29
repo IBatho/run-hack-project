@@ -284,3 +284,27 @@ audio {
   border-color: #7f1d1d;
   color: var(--danger);
 }
+
+.board {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.board th,
+.board td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.board th {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.board tbody tr:first-child td {
+  color: var(--accent-2);
+}

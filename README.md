@@ -4,6 +4,7 @@ Runnable prototype of two hackathon features:
 
 1. **Audio Roast Engine** — when a runner's pace drops below a configurable target, an ElevenLabs voice roast is generated and played, with a **Healf** sponsor hook woven into the copy.
 2. **Ghost Pacer Bet** — a friend/group creates a stake with pace/distance targets; when a target is missed the runner's ElevenLabs "voice note of shame" is generated and pushed to the group via a **Poke** messaging webhook.
+3. **Leaderboard** — completed runs (manual, **Strava** import, or the iOS tracker) are ranked by distance, best pace or roasts taken, enriched with each runner's roast and bet record.
 
 Every external provider sits behind an adapter with a local mock, so the whole flow runs end to end **with no credentials**.
 
@@ -18,6 +19,7 @@ Open <http://localhost:5173>:
 
 - **🔥 Audio Roast Engine** tab — tune target pace / tolerance / debounce / cooldown, hit **Run scripted demo**, and the roast audio auto-plays as the pace series crosses the threshold.
 - **👻 Ghost Pacer Bet** tab — create a stake, send progress pings, then **Finish run & settle**; a missed target produces the confession audio and a Poke delivery visible in the outbox.
+- **🏆 Leaderboard** tab — switch metric (distance / best pace / most roasted), log a run by hand, or **Connect** + **Sync activities** to pull runs from Strava (fixture runs in mock mode).
 
 Headless version of the same flow (API must be running):
 
@@ -36,15 +38,18 @@ src/server/
   domain/
     roastEngine.ts   pure pace-threshold / debounce / cooldown decision logic
     betEngine.ts     pure target evaluation + miss detection
+    leaderboard.ts   pure ranking of runners from activities + roasts + bets
     copy.ts          roast + confession text composition
   adapters/
     voice.ts         VoiceProvider: ElevenLabs | Mock | Fallback
     healf.ts         SponsorProvider: Healf | Mock | Fallback
     poke.ts          GroupMessenger: Poke webhook (with retries) | Mock outbox
+    strava.ts        ActivityProvider: Strava OAuth + activity import | Mock fixtures
     wav.ts           offline speech-ish WAV renderer used by the mock voice
-  services/          store (in-memory), audio store, roast + bet orchestration
+  services/          store (in-memory), audio store, roast + bet + activity orchestration
   app.ts             Express app factory (injectable config + fetch)
 src/web/             React prototype UI (Vite)
+ios/RunHackTracker/  SwiftUI + CoreLocation tracker prototype (source only, never compiled)
 scripts/demo.ts      end-to-end demo driver
 tests/               vitest: domain logic, adapters, API integration
 ```
@@ -66,8 +71,32 @@ Copy `.env.example` to `.env`. Nothing is required — each provider independent
 | `POKE_WEBHOOK_URL` / `POKE_API_KEY` | Enables live group delivery |
 | `POKE_MAX_ATTEMPTS` | Retry budget for transient (network/5xx) webhook failures |
 | `POKE_MOCK_FAIL_ATTEMPTS` | Mock only: fail N attempts to demo the error path |
+| `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` | Enables live Strava OAuth + activity import |
+| `STRAVA_REFRESH_TOKEN` | Optional: start already connected after a restart |
+| `STRAVA_REDIRECT_URI` | OAuth callback (default `http://localhost:8787/api/strava/callback`); host must match the app's callback domain |
+| `STRAVA_SCOPE` | Requested scopes (default `read,activity:read`) |
+| `STRAVA_RUNNER_NAME` | Leaderboard name for imported runs when the athlete name is unknown |
+| `STRAVA_API_BASE_URL` / `STRAVA_AUTH_BASE_URL` | Endpoint overrides for tests/sandboxes |
 
 Never commit real values; `.env` is gitignored.
+
+### Required user-provided inputs (names only, no values)
+
+| Feature | Input | Where it is used | How to obtain |
+| --- | --- | --- | --- |
+| Audio (roasts + confessions) | `ELEVENLABS_API_KEY` | `src/server/adapters/voice.ts` (`xi-api-key` header) | elevenlabs.com → Profile → API Keys |
+| Audio | `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` | same adapter; defaults ship in `config.ts` | Voice Library / model list |
+| Sponsor copy | `HEALF_API_KEY`, `HEALF_API_URL`, `HEALF_CAMPAIGN_ID` | `src/server/adapters/healf.ts` | Healf; endpoint contract still unconfirmed |
+| Group delivery | `POKE_WEBHOOK_URL`, `POKE_API_KEY` | `src/server/adapters/poke.ts` | Poke inbound webhook for the group chat |
+| Group delivery | `PUBLIC_BASE_URL` | `src/server/services/audioStore.ts` clip URLs | ngrok/cloudflared tunnel so Poke can fetch audio |
+| Strava tracking | `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET` | `src/server/adapters/strava.ts` | strava.com/settings/api → create an API application |
+| Strava tracking | `STRAVA_REDIRECT_URI` (+ matching **Authorization Callback Domain** on the Strava app) | authorize URL + `GET /api/strava/callback` | Strava app settings |
+| Strava tracking | `STRAVA_REFRESH_TOKEN`, `STRAVA_RUNNER_NAME` | `ActivityService` bootstrap / activity attribution | from a completed OAuth exchange |
+| iOS tracker | Apple Developer account + Team ID, bundle identifier, provisioning/signing | Xcode target | developer.apple.com |
+| iOS tracker | Background Modes capability (*Location updates*, *Audio*), `NSLocationWhenInUseUsageDescription`, `NSLocationAlwaysAndWhenInUseUsageDescription`, `NSAppTransportSecurity` local-networking exception | Info.plist + Signing & Capabilities | Xcode |
+| iOS tracker | Reachable API base URL (LAN IP or tunnel) | `RunHackTrackerApp.apiBaseURL` | your dev machine |
+
+Nothing above is required to run the prototype: every provider falls back to a mock.
 
 ### ElevenLabs
 
@@ -141,6 +170,12 @@ Network errors and 5xx are retried up to `POKE_MAX_ATTEMPTS`; 4xx is not retried
 | `GET` | `/api/bets/:id` | bet detail |
 | `POST` | `/api/bets/:id/progress` | progress snapshot; `final: true` settles and triggers the confession |
 | `GET` | `/api/poke/outbox` | delivery log |
+| `GET` | `/api/leaderboard` | ranked runners; `?metric=distance\|pace\|roasts`, `?days=N` window |
+| `GET`/`POST` | `/api/activities` | list / log a completed run |
+| `GET` | `/api/strava/status` | provider mode, connection state, authorize URL |
+| `POST` | `/api/strava/connect` | exchange an authorization `code` for tokens |
+| `GET` | `/api/strava/callback` | OAuth redirect target (same exchange, `?code=`) |
+| `POST` | `/api/strava/sync` | import activities; de-duplicated by Strava activity id |
 | `POST` | `/api/demo/reset` | reseed demo data |
 
 ### Sample requests
@@ -164,6 +199,35 @@ curl -s -X POST localhost:8787/api/bets/$BET/progress -H 'content-type: applicat
 curl -s localhost:8787/api/poke/outbox
 ```
 
+### Strava tracking
+
+Standard authorization-code flow: `GET /api/strava/status` returns the authorize URL, the
+redirect lands on `GET /api/strava/callback?code=…`, and `POST /api/strava/sync` reads
+`GET /api/v3/athlete/activities`. Only running activities are kept; distance/moving time are
+converted to sec/km (`average_speed` in m/s is the fallback) so the rest of the app keeps
+speaking pace. Imports are de-duplicated by Strava activity id, so syncing twice is safe.
+Tokens are held in memory and refreshed on expiry; `STRAVA_REFRESH_TOKEN` seeds a connected
+account at boot. Without credentials the mock provider serves three fixture runs.
+
+## Tracking approach: Strava now, Swift later
+
+The leaderboard needs a real source of distance/speed. Two options were considered:
+
+- **Strava integration (implemented, runnable).** Pure TypeScript inside the existing adapter
+  pattern, testable with an injected `fetch`, mockable end to end, and it inherits every run a
+  user already records with a watch or phone. Cost: activities appear post-run, so it feeds the
+  leaderboard but cannot drive live roasts.
+- **Native Swift tracker (prototyped, not built).** The only way to get live location/pace for
+  in-run roasting, but it needs macOS + Xcode, an Apple Developer team, device signing and
+  background-location entitlements — none of which exist in this environment, so nothing could
+  be compiled or verified. The sources in `ios/RunHackTracker/` are a head start, not an app.
+
+So Strava is the working prototype and the Swift app is the follow-up: finish it on a Mac to
+unlock live roasting, and keep Strava as the backfill for runs tracked on other devices.
+Follow-ups: persist activities and Strava tokens (currently in-memory), add Strava webhook
+push instead of manual sync, per-user identity so imported activities map to real accounts,
+and an offline sample queue in the iOS app.
+
 ## Trigger semantics
 
 - **Roast**: fires when pace > `target × (1 + tolerance)` for `debounceSamples` consecutive samples, and only if `cooldownSec` has elapsed since the last roast. Returning inside target resets the debounce so the next slowdown is a fresh crossing.
@@ -177,4 +241,5 @@ curl -s localhost:8787/api/poke/outbox
 
 ## Status & limitations
 
+The iOS tracker has never been compiled (no Xcode on this machine) — see `ios/RunHackTracker/README.md`.
 State is in-memory (restart or `POST /api/demo/reset` clears it) — the store and audio store are deliberately narrow interfaces to swap for Postgres/S3. The Healf and Poke request/response shapes are best-effort prototypes and may need adjusting to the real sponsor/webhook contracts; both are one-file changes inside `src/server/adapters/`.

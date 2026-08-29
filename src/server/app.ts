@@ -1,11 +1,13 @@
 import express, { type Express, type Request, type Response } from 'express';
-import type { ProviderStatus } from '../shared/types.js';
+import type { LeaderboardMetric, ProviderStatus } from '../shared/types.js';
 import { createGroupMessenger } from './adapters/poke.js';
 import { createSponsorProvider } from './adapters/healf.js';
+import { createActivityProvider } from './adapters/strava.js';
 import { createVoiceProvider, type FetchLike } from './adapters/voice.js';
 import { loadConfig, type AppConfig } from './config.js';
 import { paceThreshold } from './domain/roastEngine.js';
 import { seedDemoData } from './seed.js';
+import { ActivityService } from './services/activityService.js';
 import { AudioStore } from './services/audioStore.js';
 import { BetService } from './services/betService.js';
 import { RoastService } from './services/roastService.js';
@@ -23,6 +25,7 @@ export interface AppContext {
   store: RunStore;
   roastService: RoastService;
   betService: BetService;
+  activityService: ActivityService;
   providers: ProviderStatus;
 }
 
@@ -41,18 +44,26 @@ export function createApp(deps: AppDeps = {}): AppContext {
   const voice = createVoiceProvider(config, fetchImpl);
   const sponsor = createSponsorProvider(config, fetchImpl);
   const messenger = createGroupMessenger(config, fetchImpl);
+  const activityProvider = createActivityProvider(config, fetchImpl);
   const providers: ProviderStatus = {
     elevenlabs: voice.mode,
     healf: sponsor.mode,
     poke: messenger.mode,
+    strava: activityProvider.mode,
   };
 
   const store = new RunStore();
   const audioStore = new AudioStore(config.publicBaseUrl);
   const roastService = new RoastService(store, voice, sponsor, audioStore, config.elevenLabs.defaultVoiceId);
   const betService = new BetService(store, voice, messenger, audioStore, config.elevenLabs.defaultVoiceId);
+  const activityService = new ActivityService(
+    store,
+    activityProvider,
+    config.strava.runnerName,
+    config.strava.refreshToken,
+  );
 
-  if (deps.seed !== false) seedDemoData(store, roastService, betService);
+  if (deps.seed !== false) seedDemoData(store, roastService, betService, activityService);
 
   const app = express();
   app.use(express.json({ limit: '256kb' }));
@@ -220,8 +231,85 @@ export function createApp(deps: AppDeps = {}): AppContext {
     res.json({ provider: providers.poke, deliveries: betService.outbox() });
   });
 
+  // --- Leaderboard --------------------------------------------------------
+  app.get('/api/leaderboard', (req, res) => {
+    const metric = (req.query.metric as LeaderboardMetric | undefined) ?? 'distance';
+    if (metric !== 'distance' && metric !== 'pace' && metric !== 'roasts') {
+      return bad(res, "metric must be 'distance', 'pace' or 'roasts'");
+    }
+    const days = number(req.query.days);
+    const sinceMs = days === undefined ? undefined : Date.now() - days * 86_400_000;
+    return res.json({ metric, entries: activityService.leaderboard(metric, sinceMs) });
+  });
+
+  app.get('/api/activities', (_req, res) => {
+    res.json({ activities: store.listActivities() });
+  });
+
+  app.post('/api/activities', (req, res) => {
+    const { runnerName, name, source, sessionId, startedAt } = req.body ?? {};
+    const distanceKm = number(req.body?.distanceKm);
+    const durationSec = number(req.body?.durationSec);
+    if (!runnerName || typeof runnerName !== 'string') return bad(res, 'runnerName is required');
+    if (distanceKm === undefined || distanceKm <= 0) return bad(res, 'distanceKm must be positive');
+    if (durationSec === undefined || durationSec <= 0) return bad(res, 'durationSec must be positive');
+    if (source !== undefined && source !== 'manual' && source !== 'strava' && source !== 'ios') {
+      return bad(res, "source must be 'manual', 'strava' or 'ios'");
+    }
+    const activity = activityService.record({
+      runnerName,
+      distanceKm,
+      durationSec,
+      name,
+      source,
+      sessionId,
+      startedAt,
+    });
+    return res.status(201).json({ activity });
+  });
+
+  // --- Strava tracking ----------------------------------------------------
+  app.get('/api/strava/status', (_req, res) => {
+    res.json({ strava: activityService.stravaStatus() });
+  });
+
+  app.post('/api/strava/connect', async (req, res, next) => {
+    try {
+      const code = req.body?.code;
+      if (!code || typeof code !== 'string') return bad(res, 'code is required');
+      return res.json({ strava: await activityService.connect(code) });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.get('/api/strava/callback', async (req, res, next) => {
+    try {
+      const code = req.query.code;
+      if (typeof code !== 'string') return bad(res, 'code query parameter is required');
+      return res.json({ strava: await activityService.connect(code) });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.post('/api/strava/sync', async (req, res, next) => {
+    try {
+      const result = await activityService.sync({
+        runnerName: req.body?.runnerName,
+        afterEpochSec: number(req.body?.afterEpochSec),
+      });
+      return res.json(result);
+    } catch (error) {
+      if ((error as Error).message === 'Strava is not connected') {
+        return res.status(409).json({ error: (error as Error).message });
+      }
+      return next(error);
+    }
+  });
+
   app.post('/api/demo/reset', (_req, res) => {
-    seedDemoData(store, roastService, betService);
+    seedDemoData(store, roastService, betService, activityService);
     res.json({ ok: true, sessions: store.listSessions(), bets: store.listBets() });
   });
 
@@ -230,5 +318,5 @@ export function createApp(deps: AppDeps = {}): AppContext {
     res.status(500).json({ error: error.message });
   });
 
-  return { app, config, store, roastService, betService, providers };
+  return { app, config, store, roastService, betService, activityService, providers };
 }

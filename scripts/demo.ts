@@ -84,6 +84,31 @@ async function main() {
     );
   }
 
+  // --- Feature 3: Leaderboard --------------------------------------------
+  console.log('\n== Leaderboard ==');
+  await post('/api/strava/connect', { code: 'demo-code' });
+  const sync = await post<{ imported: unknown[]; skipped: number }>('/api/strava/sync', {
+    runnerName: session.runnerName,
+  });
+  console.log(`strava sync: ${sync.imported.length} imported, ${sync.skipped} already known`);
+
+  const board = await call<{
+    entries: Array<{
+      rank: number;
+      runnerName: string;
+      totalDistanceKm: number;
+      bestPaceSecPerKm: number | null;
+      roastCount: number;
+    }>;
+  }>('/api/leaderboard?metric=distance');
+
+  for (const entry of board.entries) {
+    const best = entry.bestPaceSecPerKm === null ? '—' : formatPace(entry.bestPaceSecPerKm);
+    console.log(
+      `  ${entry.rank}. ${entry.runnerName} — ${entry.totalDistanceKm}km, best ${best}, ${entry.roastCount} roast(s)`,
+    );
+  }
+
   console.log('\nOpen http://localhost:5173 to play the audio in the prototype UI.');
 }
 

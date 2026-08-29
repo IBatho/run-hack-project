@@ -1,4 +1,4 @@
-import type { Bet, PaceSample, Roast, RunSession } from '../../shared/types.js';
+import type { Bet, PaceSample, Roast, RunActivity, RunSession } from '../../shared/types.js';
 import { initialRoastState, type RoastEvaluationState } from '../domain/roastEngine.js';
 
 /** In-memory prototype store. Swap for a real DB behind the same methods. */
@@ -8,6 +8,7 @@ export class RunStore {
   private readonly roasts = new Map<string, Roast[]>();
   private readonly roastStates = new Map<string, RoastEvaluationState>();
   private readonly bets = new Map<string, Bet>();
+  private readonly activities = new Map<string, RunActivity>();
 
   listSessions(): RunSession[] {
     return [...this.sessions.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -53,6 +54,31 @@ export class RunStore {
     return [...(this.roasts.get(sessionId) ?? [])].reverse();
   }
 
+  /** Roast counts per runner, resolved through the session that produced them. */
+  roastCountsByRunner(): Map<string, number> {
+    const counts = new Map<string, number>();
+    for (const session of this.sessions.values()) {
+      const count = this.roasts.get(session.id)?.length ?? 0;
+      counts.set(session.runnerName, (counts.get(session.runnerName) ?? 0) + count);
+    }
+    return counts;
+  }
+
+  addActivity(activity: RunActivity): RunActivity {
+    this.activities.set(activity.id, activity);
+    return activity;
+  }
+
+  listActivities(): RunActivity[] {
+    return [...this.activities.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  }
+
+  findActivityByExternalId(source: RunActivity['source'], externalId: string): RunActivity | undefined {
+    return [...this.activities.values()].find(
+      (activity) => activity.source === source && activity.externalId === externalId,
+    );
+  }
+
   listBets(): Bet[] {
     return [...this.bets.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
@@ -72,5 +98,6 @@ export class RunStore {
     this.roasts.clear();
     this.roastStates.clear();
     this.bets.clear();
+    this.activities.clear();
   }
 }
