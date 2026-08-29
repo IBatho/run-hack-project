@@ -1,6 +1,15 @@
 # run-hack-project
 
-Runnable prototype of four hackathon features:
+A running coach that lives in the chat app you already use, ranks you against your own
+past self rather than faster strangers, and yells at you in your ear while you run.
+
+Concept and planning package: **[docs/README.md](docs/README.md)** (product thesis, scope,
+decision matrix, open questions). Setup and deployment: **[docs/setup.md](docs/setup.md)**
+and **[docs/poke-recipe.md](docs/poke-recipe.md)**.
+
+## What it does
+
+Runnable prototype of six hackathon features:
 
 1. **Audio Roast Engine** — when a runner's pace drops below a configurable target, an ElevenLabs voice roast is generated and played, with a **Healf** sponsor hook woven into the copy.
 2. **Ghost Pacer Bet** — a friend/group creates a stake with pace/distance targets; when a target is missed the runner's ElevenLabs "voice note of shame" is generated and pushed to the group via a **Poke** messaging webhook.
