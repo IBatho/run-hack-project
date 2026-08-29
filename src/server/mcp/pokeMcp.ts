@@ -10,7 +10,9 @@
  * `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call`.
  */
 import type { ActivityService } from '../services/activityService.js';
+import type { RunCommandService } from '../services/runCommandService.js';
 import type { RunStore } from '../services/store.js';
+import { isCoachMode } from '../../shared/types.js';
 import type { LeaderboardMetric } from '../../shared/types.js';
 
 export const MCP_PATH = '/api/poke/mcp';
@@ -19,6 +21,7 @@ const PROTOCOL_VERSION = '2024-11-05';
 export interface McpDeps {
   store: RunStore;
   activities: ActivityService;
+  commands: RunCommandService;
 }
 
 export interface JsonRpcRequest {
@@ -82,6 +85,28 @@ const TOOLS = [
       required: ['runnerName', 'distanceKm', 'durationSec'],
     },
   },
+  {
+    name: 'run_command',
+    description:
+      'Handle a natural-language coaching command such as "start my run", "stop my run" or ' +
+      '"roast me". Returns a reply to relay plus a web app URL: the runner must tap once in the ' +
+      'browser before audio can play, because browsers block audio without a user gesture.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: "The runner's message, verbatim." },
+        runnerName: { type: 'string', description: 'Overrides the runner named in the text.' },
+        targetPaceSecPerKm: { type: 'number', description: 'Target pace in seconds per km.' },
+        coachMode: { type: 'string', enum: ['roast', 'drill'] },
+        conversationId: { type: 'string' },
+        idempotencyKey: {
+          type: 'string',
+          description: 'Repeat calls with the same key return the original command.',
+        },
+      },
+      required: ['text'],
+    },
+  },
 ] as const;
 
 const ok = (id: JsonRpcResponse['id'], result: unknown): JsonRpcResponse => ({
@@ -108,7 +133,11 @@ const numeric = (value: unknown): number | undefined => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
-function callTool(name: string, args: Record<string, unknown>, deps: McpDeps): ReturnType<typeof toolResult> {
+async function callTool(
+  name: string,
+  args: Record<string, unknown>,
+  deps: McpDeps,
+): Promise<ReturnType<typeof toolResult>> {
   switch (name) {
     case 'get_leaderboard': {
       const metric = (str(args.metric) ?? 'distance') as LeaderboardMetric;
@@ -166,6 +195,25 @@ function callTool(name: string, args: Record<string, unknown>, deps: McpDeps): R
       return toolResult({ activity });
     }
 
+    case 'run_command': {
+      const text = str(args.text);
+      if (!text) return toolResult({ error: 'text is required' }, true);
+      const mode = str(args.coachMode);
+      if (mode !== undefined && !isCoachMode(mode)) {
+        return toolResult({ error: "coachMode must be 'roast' or 'drill'" }, true);
+      }
+      const outcome = await deps.commands.dispatch({
+        text,
+        runnerName: str(args.runnerName),
+        targetPaceSecPerKm: numeric(args.targetPaceSecPerKm),
+        coachMode: mode,
+        conversationId: str(args.conversationId),
+        idempotencyKey: str(args.idempotencyKey),
+        source: 'poke_mcp',
+      });
+      return toolResult(outcome, !outcome.ok);
+    }
+
     default:
       return toolResult({ error: `unknown tool ${name}` }, true);
   }
@@ -175,7 +223,10 @@ function callTool(name: string, args: Record<string, unknown>, deps: McpDeps): R
  * Handles one JSON-RPC message. Returns `null` for notifications, which have no
  * id and must not produce a response body.
  */
-export function handleMcpRequest(body: JsonRpcRequest, deps: McpDeps): JsonRpcResponse | null {
+export async function handleMcpRequest(
+  body: JsonRpcRequest,
+  deps: McpDeps,
+): Promise<JsonRpcResponse | null> {
   const { method, id = null, params = {} } = body ?? {};
   if (!method) return fail(id, -32600, 'method is required');
 
@@ -201,7 +252,7 @@ export function handleMcpRequest(body: JsonRpcRequest, deps: McpDeps): JsonRpcRe
       const name = str(params.name);
       if (!name) return fail(id, -32602, 'params.name is required');
       const args = (params.arguments as Record<string, unknown> | undefined) ?? {};
-      return ok(id, callTool(name, args, deps));
+      return ok(id, await callTool(name, args, deps));
     }
 
     default:

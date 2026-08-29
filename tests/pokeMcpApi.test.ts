@@ -29,6 +29,7 @@ describe('Poke MCP endpoint', () => {
       'list_recent_runs',
       'get_runner_summary',
       'log_run',
+      'run_command',
     ]);
   });
 

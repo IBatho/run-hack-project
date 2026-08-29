@@ -253,12 +253,77 @@ JSON-RPC 2.0 (`initialize`, `ping`, `tools/list`, `tools/call`). Tools:
 | `list_recent_runs` | `runnerName`, `limit` (≤50) | completed runs, newest first |
 | `get_runner_summary` | `runnerName` (required) | totals + that runner's last 10 runs |
 | `log_run` | `runnerName`, `distanceKm`, `durationSec` (required), `name`, `startedAt` | the created activity (`source: "poke"`) |
+| `run_command` | `text` (required), `runnerName`, `targetPaceSecPerKm`, `coachMode`, `conversationId`, `idempotencyKey` | the outcome below — a reply to relay plus the URL to tap |
 
 Runs logged through MCP do **not** trigger an outbound coaching message, so Poke cannot loop back on
 itself. Set `POKE_MCP_TOKEN` and register `https://<your-host>/api/poke/mcp` in Poke; requests must
 then send `Authorization: Bearer <POKE_MCP_TOKEN>` or get a 401. The endpoint needs a public HTTPS
 origin (tunnel or deployment) before Poke can reach it — that is the only blocker to a live
 end-to-end ingestion test.
+
+### Conversational start: "start my run" in Poke chat
+
+The web **Start run** button is not the only entry point: the same run state can be started from
+chat. Poke calls the `run_command` MCP tool (or `POST /api/poke/commands` for any other webhook
+source) with the runner's words; `src/server/domain/runIntent.ts` classifies them deterministically
+— no second model call, so the contract behaves identically in tests and in the demo:
+
+| Phrase | Intent | Effect |
+| --- | --- | --- |
+| `start my run`, `start coaching`, `coach me at 5:30 in drill mode` | `start_run` | creates/reuses the runner's session (applying pace and coach mode from the sentence) and a command in `awaiting_gesture` |
+| `roast me`, `drill me` | `roast_now` | generates a roast immediately; it plays as soon as the browser has audio |
+| `stop my run`, `I'm done` | `stop_run` | completes the command; the tracker stops on its next poll |
+| anything else | `unknown` | HTTP `422` / MCP `isError`, replying with the supported phrasings — stop always wins over start, so "stop coaching and start walking" never starts a run |
+
+**Poke cannot bypass browser autoplay restrictions.** Browsers only start audio from a user
+gesture, so a command is created in `awaiting_gesture` and the reply carries
+`webAppUrl` = `{PUBLIC_BASE_URL}/?command=<id>`. The Live Tracker polls `/api/run-commands`, shows
+the armed run, and the runner's single tap on **Start run** unlocks the `AudioContext` and calls
+`POST /api/run-commands/:id/claim` with `audioArmed`. That is the whole handoff: Poke starts the
+run, the tap turns on the sound.
+
+```jsonc
+// POST /api/poke/commands  (Authorization: Bearer $POKE_MCP_TOKEN when set; Idempotency-Key header accepted)
+{ "text": "coach me at 5:30 in drill mode", "runnerName": "Isaac", "idempotencyKey": "poke-msg-42" }
+
+// 201 Created (200 when replayed, 400 malformed, 401 bad token, 422 unrecognised phrasing)
+{
+  "ok": true, "result": "created", "intent": "start_run", "idempotent": false,
+  "reply": "Run armed for Isaac at target 5:30 … tap “Start run” once …",
+  "command": {
+    "id": "…", "status": "awaiting_gesture", "audioArmed": false, "sessionId": "…",
+    "coachMode": "drill", "targetPaceSecPerKm": 330, "source": "poke_webhook",
+    "webAppUrl": "https://…/?command=…", "expiresAt": "…"
+  }
+}
+```
+
+Idempotency and status:
+
+- repeating an `idempotencyKey` returns the original command with `idempotent: true` and `result:
+  "replayed"`; so does a second `start` while one is already active, so a chatty conversation never
+  spawns two runs;
+- `awaiting_gesture` → `armed` (claimed with audio running) → `completed` (finish run or
+  `stop my run`). A claim reporting `audioArmed: false` stays `awaiting_gesture` so the runner is
+  asked again rather than running silently;
+- unclaimed commands expire 15 minutes after creation; once armed they live for the run (3h).
+
+Commands live in process memory like the rest of the demo state, so on Vercel's serverless runtime a
+command created by one invocation may not be visible to the invocation the browser polls. Run the
+server as a long-running process (`npm start`, or a tunnel) for a live Poke demo — same caveat as
+audio clips, see [docs/setup.md](docs/setup.md#4-vercel-hosting).
+
+Verify it end to end in mock mode, no keys:
+
+```bash
+curl -s -X POST localhost:8787/api/poke/commands -H 'content-type: application/json' \
+  -d '{"text":"start my run","runnerName":"Isaac"}'          # -> webAppUrl to open
+curl -s localhost:8787/api/run-commands                        # what the web app polls
+```
+
+Open the printed `webAppUrl`, tap **Start run**, and the command flips to `armed` with audio live.
+`tests/runCommandApi.test.ts` covers the same path (webhook, MCP tool, auth, idempotency, claim and
+error behaviour) headlessly.
 
 ## API
 
@@ -279,6 +344,11 @@ end-to-end ingestion test.
 | `GET` | `/api/poke/status` | Poke AI mode, endpoint, MCP path, counters + coaching outbox |
 | `POST` | `/api/poke/digest` | send a leaderboard digest; optional `runnerName` |
 | `POST` | `/api/poke/mcp` | MCP JSON-RPC endpoint for Poke (bearer token if `POKE_MCP_TOKEN` is set) |
+| `POST` | `/api/poke/commands` | natural-language run control (`start my run`); same bearer token as MCP |
+| `GET` | `/api/run-commands` | commands awaiting a browser gesture; `?runnerName=` filter |
+| `GET` | `/api/run-commands/:id` | one command's status |
+| `POST` | `/api/run-commands/:id/claim` | web app claims a command from the user's tap (`audioArmed`) |
+| `POST` | `/api/run-commands/:id/complete` | run finished or stopped |
 | `GET` | `/api/strava/status` | provider mode, connection state, authorize URL |
 | `POST` | `/api/strava/connect` | exchange an authorization `code` for tokens |
 | `GET` | `/api/strava/callback` | OAuth redirect target (same exchange, `?code=`) |
@@ -338,10 +408,27 @@ Every 15s the rolling pace is POSTed to
 `/api/sessions/:id/samples`, so the existing threshold/debounce/cooldown engine decides when a
 roast fires — the tracker adds no roast logic of its own.
 
-Audio goes through one `AudioContext` created inside the Start click handler (mobile browsers
-mute audio started anywhere else): roast WAVs are fetched and played with `decodeAudioData`,
-short oscillator cues mark start/finish/slowdown, and `speechSynthesis` reads the roast aloud if
-the clip is missing. **Finish run** posts the run to `/api/activities` with `source: 'web'`.
+Audio goes through one `AudioContext` created inside the Start click handler (mobile browsers mute
+audio started anywhere else) and every roast is played by the queue in
+`src/web/tracking/roastAudio.ts`, which owns the parts that used to be missing:
+
+- **one at a time** — roasts are serialised, so a threshold roast firing mid-clip waits its turn
+  instead of two voices talking over each other;
+- **queue hygiene** — duplicates are ignored, a full queue drops its oldest entry, and a roast older
+  than 2 minutes is dropped rather than shouted about a kilometre you already finished;
+- **fallbacks** — clip → `speechSynthesis` reading the text → an error surfaced in the panel, so a
+  failed ElevenLabs clip is never a silent failure;
+- **controls** — allow/re-arm audio, mute, skip, volume, plus counters for played/spoken/dropped,
+  mirrored to the lock screen through the Media Session API (skip / pause / play);
+- **background** — roasts fired server-side are picked up by a 5s poll (not just the reply to our
+  own sample POST), a near-silent keep-alive buffer holds the context open, a Screen Wake Lock is
+  taken while tracking, and `visibilitychange`/`focus` re-arm a context the OS suspended.
+
+Audio state is explicit (`unsupported` / `idle` / `blocked` / `armed` / `playing`) and shown in the
+**Coach audio** card, so a blocked context reads as "tap to allow audio" instead of silence.
+**Finish run** posts the run to `/api/activities` with `source: 'web'`. The queue takes a
+`RoastAudioPlayer` rather than touching `window`, which is what makes `tests/roastAudio.test.ts`
+possible in node.
 
 ### Running and testing it (5 minutes)
 
@@ -359,10 +446,12 @@ the clip is missing. **Finish run** posts the run to `/api/activities` with `sou
   `window.isSecureContext` and says so instead of failing silently.
 - **Location permission**: prompted on first Start; if denied the panel explains how to recover
   and simulated GPS still works.
-- **Audio autoplay**: the AudioContext is unlocked by the Start click; audio may stay silent if
-  the run is started programmatically or the device is on silent (iOS honours the ringer switch).
-- **Foreground tab**: browsers throttle timers and GPS in background tabs, so keep the screen on.
-  This is the main functional gap vs. a native app.
+- **Audio autoplay**: the AudioContext is unlocked by the Start click; a run started from Poke chat
+  therefore waits for one tap in the browser, and audio can still stay silent if the device is on
+  silent (iOS honours the ringer switch).
+- **Background playback**: Wake Lock, the keep-alive buffer and re-arming on `visibilitychange` are
+  best-effort, not guarantees — browsers may still suspend audio and throttle GPS in a background
+  tab. This remains the main functional gap vs. a native app.
 
 ## Tracking approach: browser PWA + Strava (native app dropped)
 

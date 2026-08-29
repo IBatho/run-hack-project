@@ -33,7 +33,7 @@ Full annotated list: [`.env.example`](../.env.example). Only the first column is
 | `ELEVENLABS_DRILL_VOICE_ID` | no | separate, harder-edged voice for drill mode |
 | `COACH_DEFAULT_MODE` | no | `roast` (default) or `drill` for new sessions |
 | `POKE_AI_API_KEY` | yes | outbound coaching messages to Poke |
-| `POKE_MCP_TOKEN` | yes | bearer token Poke must present to call our MCP server |
+| `POKE_MCP_TOKEN` | yes | bearer token Poke must present to call our MCP server *and* `POST /api/poke/commands` |
 | `POKE_WEBHOOK_URL`, `POKE_API_KEY` | yes | Ghost Pacer Bet confession delivery to a group chat |
 | `HEALF_API_KEY`, `HEALF_API_URL`, `HEALF_CAMPAIGN_ID` | key only | live sponsor hooks |
 | `STRAVA_CLIENT_SECRET`, `STRAVA_REFRESH_TOKEN` | yes | Strava import |
@@ -199,3 +199,5 @@ idempotent, which the in-memory store does by hand today.
 - [ ] `GET /api/health` shows `live` for the providers you expect
 - [ ] `POKE_MCP_TOKEN` set **before** registering the MCP URL in Poke
 - [ ] A drill-mode roast plays end to end from the UI
+- [ ] "start my run" in Poke returns a `?command=` link, and one tap in the browser flips the
+      command to `armed` (see [poke-recipe.md](poke-recipe.md#d-start-my-run-from-the-chat))

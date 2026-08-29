@@ -20,8 +20,8 @@ Push happens automatically when a run is recorded (`run_completed`), when the ro
 questions — leaderboard, recent runs, runner summary — or logging a run it heard about in chat.
 
 MCP tools exposed (full argument table in the [README](../README.md#poke-ai-ingestion-mcp-server)):
-`get_leaderboard`, `list_recent_runs`, `get_runner_summary`, `log_run`. Runs logged via MCP do not
-trigger an outbound message, so Poke cannot loop back on itself.
+`get_leaderboard`, `list_recent_runs`, `get_runner_summary`, `log_run`, `run_command`. Runs logged
+via MCP do not trigger an outbound message, so Poke cannot loop back on itself.
 
 Poke sends `X-Poke-User-Id` on every MCP request — the hook for per-runner scoping once accounts
 exist (today all data is shared; see [Multi-runner scoping](#multi-runner-scoping)).
@@ -90,6 +90,41 @@ curl -s localhost:8787/api/poke/mcp -H 'content-type: application/json' \
 In mock mode (no keys) all four still work — messages accumulate in the outbox rather than being
 delivered, which is exactly what the 🤖 Poke AI tab renders.
 
+## D. "Start my run" from the chat
+
+The conversational entry point. The runner types it at Poke instead of opening the app first, Poke
+calls `run_command`, and the app arms exactly the state the web **Start run** button would.
+
+```text
+Runner: start my run
+Poke  -> run_command { text: "start my run", runnerName: "Isaac", idempotencyKey: "<poke message id>" }
+App   -> { result: "created", command: { status: "awaiting_gesture", webAppUrl: "https://…/?command=…" } }
+Poke  : "Run armed for Isaac at target 5:30 (roast coach). Open <link> and tap Start run once …"
+Runner: taps Start run  ->  POST /api/run-commands/<id>/claim { audioArmed: true }  ->  status "armed"
+```
+
+The tap is not a nicety. **Poke cannot bypass browser autoplay restrictions**: audio only starts
+from a user gesture in the page, so the server can create the session, pick the pace and coach mode
+out of the sentence and pre-generate roasts, but the coach only reaches the headphones after the
+runner taps once. A claim that reports `audioArmed: false` deliberately leaves the command
+`awaiting_gesture` so the runner gets asked again instead of running in silence.
+
+Contract, auth and status details — request/response bodies, `idempotencyKey` replay, the
+`awaiting_gesture → armed → completed` lifecycle, expiry, and the 400/401/422 cases — are in the
+[README](../README.md#conversational-start-start-my-run-in-poke-chat). Two things worth repeating
+here:
+
+- `POST /api/poke/commands` (for webhook sources that are not MCP) shares `POKE_MCP_TOKEN`. Set it
+  before exposing the endpoint publicly, or anyone can start runs in your deployment.
+- Poke retries and chatty conversations are safe: pass the Poke message id as `idempotencyKey`, and
+  a second "start my run" while a run is already armed replays the first command instead of opening
+  a second session.
+
+Supported phrasings are advertised by `SUPPORTED_PHRASES` in `src/server/domain/runIntent.ts` and
+returned verbatim in the reply when a message is not understood, so the recipe's onboarding text and
+the app never drift apart. Add the phrasings to the recipe description so installers know what to
+say; unrecognised text is answered, never guessed at.
+
 ## Coach mode over Poke
 
 The `coachMode` on a session decides the personality of every roast the engine fires, so drill mode
@@ -107,6 +142,9 @@ or the selector in the 🔥 tab; `COACH_DEFAULT_MODE` sets the default for new s
 | Tools work locally, not from Poke | tunnel stopped, or `localhost` registered | restart `npx poke@latest tunnel`, or deploy |
 | Messages appear in the outbox, never in chat | `POKE_AI_API_KEY` missing, or a `pk_` legacy key | create a **V2** key in Settings → Advanced |
 | Audio link in chat does not play | `PUBLIC_BASE_URL` unset/not reachable, or serverless memory | set it to the deployed origin; see the serverless caveat in [setup.md](setup.md#4-vercel-hosting) |
+| Poke says the run is armed but nothing plays | the browser never got its gesture (`status` still `awaiting_gesture`) | open the `webAppUrl` and tap **Start run**; check `GET /api/run-commands/<id>` |
+| "start my run" answered with the phrase list | intent not recognised | use a supported phrasing (`SUPPORTED_PHRASES`), e.g. `start coaching` |
+| A command vanished before the runner tapped | unclaimed commands expire after 15 minutes | say it again; the reply carries a fresh link |
 | 4xx recorded, no retry | intentional — 4xx is not retried, only network/5xx up to `POKE_AI_MAX_ATTEMPTS` | fix the key/payload |
 
 ## Multi-runner scoping

@@ -15,6 +15,7 @@ import { AudioStore } from './services/audioStore.js';
 import { BetService } from './services/betService.js';
 import { CoachService } from './services/coachService.js';
 import { RoastService } from './services/roastService.js';
+import { RunCommandService } from './services/runCommandService.js';
 import { RunStore } from './services/store.js';
 
 export interface AppDeps {
@@ -31,6 +32,7 @@ export interface AppContext {
   betService: BetService;
   activityService: ActivityService;
   coachService: CoachService;
+  runCommandService: RunCommandService;
   providers: ProviderStatus;
 }
 
@@ -81,6 +83,11 @@ export function createApp(deps: AppDeps = {}): AppContext {
     config.strava.runnerName,
     config.strava.refreshToken,
   );
+
+  const runCommandService = new RunCommandService(store, roastService, {
+    publicBaseUrl: config.publicBaseUrl,
+    defaultRunnerName: config.strava.runnerName,
+  });
 
   const coachService = new CoachService(store, activityService, coachChannel, {
     mcpPath: MCP_PATH,
@@ -323,16 +330,90 @@ export function createApp(deps: AppDeps = {}): AppContext {
   });
 
   // MCP server Poke calls to read runs and log new ones.
-  app.post(MCP_PATH, (req, res) => {
+  app.post(MCP_PATH, async (req, res) => {
     if (config.pokeAi.mcpToken) {
       const provided = req.header('authorization');
       if (provided !== `Bearer ${config.pokeAi.mcpToken}`) {
         return res.status(401).json({ error: 'invalid or missing bearer token' });
       }
     }
-    const response = handleMcpRequest(req.body ?? {}, { store, activities: activityService });
+    const response = await handleMcpRequest(req.body ?? {}, {
+      store,
+      activities: activityService,
+      commands: runCommandService,
+    });
     if (!response) return res.status(202).end();
     return res.json(response);
+  });
+
+  // --- Conversational run control (Poke -> web app) -----------------------
+  /**
+   * Webhook Poke posts natural language to ("start my run"). Shares the MCP
+   * bearer token; unauthenticated only when no token is configured (mock demo).
+   * Repeat posts with the same `idempotencyKey` return the original command.
+   */
+  app.post('/api/poke/commands', async (req, res, next) => {
+    if (config.pokeAi.mcpToken) {
+      const provided = req.header('authorization');
+      if (provided !== `Bearer ${config.pokeAi.mcpToken}`) {
+        return res.status(401).json({ error: 'invalid or missing bearer token' });
+      }
+    }
+    const text = req.body?.text ?? req.body?.message;
+    if (typeof text !== 'string' || !text.trim()) return bad(res, 'text is required');
+    const mode = coachMode(req.body?.coachMode);
+    if (mode === null) return bad(res, COACH_MODE_ERROR);
+    const targetPaceSecPerKm = number(req.body?.targetPaceSecPerKm);
+    if (targetPaceSecPerKm !== undefined && targetPaceSecPerKm <= 0) {
+      return bad(res, 'targetPaceSecPerKm must be greater than 0');
+    }
+
+    try {
+      const outcome = await runCommandService.dispatch({
+        text,
+        runnerName: typeof req.body?.runnerName === 'string' ? req.body.runnerName : undefined,
+        conversationId: typeof req.body?.conversationId === 'string' ? req.body.conversationId : undefined,
+        idempotencyKey:
+          typeof req.body?.idempotencyKey === 'string'
+            ? req.body.idempotencyKey
+            : req.header('idempotency-key'),
+        coachMode: mode,
+        targetPaceSecPerKm,
+        source: 'poke_webhook',
+      });
+      // 422 keeps unparsable phrasing distinct from a malformed request body.
+      return res.status(outcome.ok ? (outcome.result === 'created' ? 201 : 200) : 422).json(outcome);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.get('/api/run-commands', (req, res) => {
+    const runnerName = typeof req.query.runnerName === 'string' ? req.query.runnerName : undefined;
+    res.json({
+      pending: runCommandService.pending(runnerName),
+      commands: runCommandService.list(),
+    });
+  });
+
+  app.get('/api/run-commands/:id', (req, res) => {
+    const command = runCommandService.get(req.params.id);
+    if (!command) return res.status(404).json({ error: 'command not found' });
+    return res.json({ command });
+  });
+
+  /** The browser calls this from the user's tap, reporting whether audio started. */
+  app.post('/api/run-commands/:id/claim', (req, res) => {
+    if (typeof req.body?.audioArmed !== 'boolean') return bad(res, 'audioArmed must be a boolean');
+    const command = runCommandService.claim(req.params.id, { audioArmed: req.body.audioArmed });
+    if (!command) return res.status(404).json({ error: 'command not found' });
+    return res.json({ command });
+  });
+
+  app.post('/api/run-commands/:id/complete', (req, res) => {
+    const command = runCommandService.complete(req.params.id);
+    if (!command) return res.status(404).json({ error: 'command not found' });
+    return res.json({ command });
   });
 
   // --- Strava tracking ----------------------------------------------------
@@ -376,6 +457,7 @@ export function createApp(deps: AppDeps = {}): AppContext {
   });
 
   app.post('/api/demo/reset', (_req, res) => {
+    runCommandService.reset();
     seedDemoData(store, roastService, betService, activityService);
     res.json({ ok: true, sessions: store.listSessions(), bets: store.listBets() });
   });
@@ -385,5 +467,15 @@ export function createApp(deps: AppDeps = {}): AppContext {
     res.status(500).json({ error: error.message });
   });
 
-  return { app, config, store, roastService, betService, activityService, coachService, providers };
+  return {
+    app,
+    config,
+    store,
+    roastService,
+    betService,
+    activityService,
+    coachService,
+    runCommandService,
+    providers,
+  };
 }

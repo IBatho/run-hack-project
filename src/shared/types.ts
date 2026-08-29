@@ -186,6 +186,43 @@ export interface LeaderboardEntry {
 /** What prompted a coaching message to Poke. */
 export type PokeCoachEvent = 'run_completed' | 'roast_fired' | 'digest';
 
+/** Conversational command Poke recognised and handed to the app. */
+export type RunCommandIntent = 'start_run' | 'stop_run' | 'roast_now';
+
+/**
+ * Lifecycle of a Poke-initiated run.
+ *
+ * `awaiting_gesture` is the important one: Poke can create the session and the
+ * roast queue server-side, but browsers only start audio from a user gesture, so
+ * the run is not truly live until the web app claims the command from a tap.
+ */
+export type RunCommandStatus = 'awaiting_gesture' | 'armed' | 'completed' | 'expired';
+
+export interface RunCommand {
+  id: string;
+  intent: RunCommandIntent;
+  status: RunCommandStatus;
+  runnerName: string;
+  /** Roast session the web app should track and voice. */
+  sessionId: string;
+  coachMode: CoachMode;
+  targetPaceSecPerKm: number;
+  /** What the runner typed in Poke. */
+  requestText: string;
+  /** Reply Poke should send back into the chat. */
+  reply: string;
+  /** Link the runner taps to arm audio and start tracking. */
+  webAppUrl: string;
+  source: 'poke_mcp' | 'poke_webhook';
+  conversationId: string | null;
+  idempotencyKey: string | null;
+  createdAt: string;
+  claimedAt: string | null;
+  /** True once the browser confirmed Web Audio is actually running. */
+  audioArmed: boolean;
+  expiresAt: string;
+}
+
 /** One coaching message pushed to Poke (or recorded by the mock channel). */
 export interface PokeCoachMessage {
   id: string;
