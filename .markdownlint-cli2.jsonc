@@ -1,0 +1,12 @@
+{
+  // Markdown lint config for the docs package.
+  // Run: npx markdownlint-cli2 "**/*.md"
+  "config": {
+    // Tables and long link lines make a hard wrap impractical.
+    "MD013": false,
+    // Repeated section names (e.g. "Risks and mitigations") under different
+    // parents are intentional.
+    "MD024": { "siblings_only": true }
+  },
+  "ignores": ["node_modules/**"]
+}
