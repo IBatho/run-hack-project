@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatPace, parsePace } from '../shared/pace.js';
 import type { Roast } from '../shared/types.js';
 import { api, clipUrl, type SessionWithThreshold } from './api.js';
-import { AudioCues } from './tracking/audioCues.js';
+import { AudioCues, shouldSpeakLocally } from './tracking/audioCues.js';
 import {
   applyFix,
   initialTrackState,
@@ -68,7 +68,7 @@ export function TrackerPanel({ reloadKey }: { reloadKey: number }) {
         setRoasts((current) => [roast, ...current]);
         cues.cue('slow');
         try {
-          if (!roast.audio) throw new Error('no clip');
+          if (!roast.audio || shouldSpeakLocally(roast.audio)) throw new Error('no live clip');
           await cues.playClip(clipUrl(roast.audio.url));
         } catch {
           cues.speak(roast.text);

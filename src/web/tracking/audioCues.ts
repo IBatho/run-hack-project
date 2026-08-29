@@ -10,7 +10,33 @@
  * feedback even when the voice provider is unavailable.
  */
 
+import type { AudioClip } from '../../shared/types.js';
+
 type CueName = 'start' | 'finish' | 'slow';
+
+export const speechSupported = (): boolean =>
+  typeof window !== 'undefined' && 'speechSynthesis' in window;
+
+/**
+ * Speaks `text` with the browser's own synthesiser. Free, keyless, and the only
+ * intelligible option while the voice provider is mocked.
+ */
+export function speakText(text: string): boolean {
+  if (!speechSupported()) return false;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 1.05;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+  return true;
+}
+
+/**
+ * Mock clips are formant gibberish rather than words, so only a live provider
+ * clip is worth playing back; anything else is better spoken by the browser.
+ */
+export function shouldSpeakLocally(audio: AudioClip | null | undefined): boolean {
+  return audio?.provider !== 'live';
+}
 
 const CUES: Record<CueName, { frequencies: number[]; stepSec: number }> = {
   start: { frequencies: [660, 880], stepSec: 0.12 },
@@ -81,9 +107,6 @@ export class AudioCues {
    * and it costs nothing — the browser's own speech synthesiser, no API key.
    */
   speak(text: string): void {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.05;
-    window.speechSynthesis.speak(utterance);
+    speakText(text);
   }
 }

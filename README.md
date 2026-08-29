@@ -120,6 +120,11 @@ Live call: `POST {ELEVENLABS_BASE_URL}/v1/text-to-speech/{voiceId}` with header 
 
 Setup: create a key at <https://elevenlabs.io> → Profile → API Keys, pick a voice id from the Voice Library, set `ELEVENLABS_API_KEY` (+ optional `ELEVENLABS_VOICE_ID`), restart.
 
+Without a key the clip is the offline WAV renderer's formant gibberish, so the UI does not play it:
+roasts and confessions are spoken instead with the browser's own `SpeechSynthesis` voice (free, no
+key), either automatically via **Auto-play newest roast** or from the **🔊 Speak roast** button. Real
+ElevenLabs clips (`provider: live`) render as an `<audio>` player as before.
+
 ### Healf sponsor hooks
 
 Live call: `POST {HEALF_API_URL}/v1/campaigns/{HEALF_CAMPAIGN_ID}/hooks` with `Authorization: Bearer {HEALF_API_KEY}`.
