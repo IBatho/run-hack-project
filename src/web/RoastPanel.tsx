@@ -28,7 +28,7 @@ export function RoastPanel({ reloadKey }: { reloadKey: number }) {
   const [customRoast, setCustomRoast] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [autoplay, setAutoplay] = useState(true);
+  const [autoplay, setAutoplay] = useState(false);
   const lastPlayedRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
@@ -39,6 +39,8 @@ export function RoastPanel({ reloadKey }: { reloadKey: number }) {
     setSession(detail.session);
     setSamples(detail.samples);
     setRoasts(detail.roasts);
+    // Roasts that already existed are history, not something to play at the user.
+    lastPlayedRef.current = detail.roasts[0]?.id ?? null;
   }, []);
 
   useEffect(() => {
@@ -55,7 +57,9 @@ export function RoastPanel({ reloadKey }: { reloadKey: number }) {
       speakText(latest.text);
       return;
     }
-    void new Audio(clipUrl(clip.url)).play().catch(() => speakText(latest.text));
+    void new Audio(clipUrl(clip.url))
+      .play()
+      .catch(() => setStatus('The browser blocked playback — press play on the newest roast.'));
   }, [roasts, autoplay]);
 
   const patch = async (changes: Partial<SessionWithThreshold>) => {
@@ -239,7 +243,7 @@ export function RoastPanel({ reloadKey }: { reloadKey: number }) {
         </div>
         <label className="checkbox">
           <input type="checkbox" checked={autoplay} onChange={(e) => setAutoplay(e.target.checked)} />
-          Auto-play newest roast
+          Auto-play newest roast (off by default; only plays roasts fired from here)
         </label>
         {!speechSupported() && (
           <p className="muted">This browser has no speech synthesiser, so mock roasts stay silent.</p>
